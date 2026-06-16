@@ -39,6 +39,10 @@ public final class VoxelWorld {
     }
 
     func buildMesh() -> [Vertex] {
+        makeWorldMesh().vertices
+    }
+
+    func makeWorldMesh() -> WorldMesh {
         var meshVertices: [Vertex] = []
 
         for x in 0..<gridSize {
@@ -69,7 +73,7 @@ public final class VoxelWorld {
             }
         }
 
-        return meshVertices
+        return WorldMesh(vertices: meshVertices)
     }
 
     private func generateTerrain() {

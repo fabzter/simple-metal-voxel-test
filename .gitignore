@@ -62,4 +62,4 @@ fastlane/screenshots/**/*.png
 fastlane/test_output
 
 # Local build artifact
-VoxelGame
+/VoxelGame
