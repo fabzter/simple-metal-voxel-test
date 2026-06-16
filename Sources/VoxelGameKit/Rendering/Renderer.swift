@@ -12,9 +12,9 @@ public final class Renderer {
 
   private var depthTexture: MTLTexture?
 
-  public init(device: MTLDevice, world: VoxelWorld, drawableSize: CGSize) {
+  public init(device: MTLDevice, world: VoxelWorld, drawableSize: CGSize) throws {
     guard let commandQueue = device.makeCommandQueue() else {
-      fatalError("Failed to create command queue")
+      throw RendererSetupError.commandQueueUnavailable
     }
 
     guard
@@ -22,18 +22,23 @@ public final class Renderer {
         length: MemoryLayout<Uniforms>.stride,
         options: .storageModeShared)
     else {
-      fatalError("Failed to allocate uniforms buffer")
+      throw RendererSetupError.uniformsBufferUnavailable
     }
 
-    let shaderLibrary = try! ShaderLibrary(device: device)
+    let shaderLibrary: ShaderLibrary
+    do {
+      shaderLibrary = try ShaderLibrary(device: device)
+    } catch {
+      throw RendererSetupError.shaderLibraryUnavailable(error)
+    }
 
     self.device = device
     self.commandQueue = commandQueue
-    self.pipelineState = try! RenderPipelineFactory.makePipelineState(
+    self.pipelineState = try RenderPipelineFactory.makePipelineState(
       device: device,
       library: shaderLibrary.library)
-    self.depthState = RenderPipelineFactory.makeDepthState(device: device)
-    self.meshBuffers = MeshBuffers(device: device, mesh: world.makeWorldMesh())
+    self.depthState = try RenderPipelineFactory.makeDepthState(device: device)
+    self.meshBuffers = try MeshBuffers(device: device, mesh: world.makeWorldMesh())
     self.uniformsBuffer = uniformsBuffer
 
     resize(drawableSize: drawableSize)

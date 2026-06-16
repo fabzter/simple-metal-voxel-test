@@ -16,6 +16,13 @@ struct ShaderLibrary {
     }
 }
 
-enum ShaderLibraryError: Error {
+enum ShaderLibraryError: LocalizedError {
     case missingLibrary
+
+    var errorDescription: String? {
+        switch self {
+        case .missingLibrary:
+            return "The compiled Metal shader library could not be found in the app bundle."
+        }
+    }
 }

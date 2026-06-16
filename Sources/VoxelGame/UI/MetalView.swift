@@ -5,14 +5,13 @@ import VoxelGameKit
 
 @MainActor
 final class MetalView: NSView {
-    private let world = VoxelWorld()
-    private let player = PlayerController()
-    private let inputController = GameInputController()
+    private let world: VoxelWorld
+    private let player: PlayerController
+    private let inputController: GameInputController
     private let device: MTLDevice
     private let renderer: Renderer
 
-    private var lastTime = CFAbsoluteTimeGetCurrent()
-    private var renderTimer: Timer?
+    private var gameLoop: GameLoop?
 
     private var metalLayer: CAMetalLayer {
         guard let layer = layer as? CAMetalLayer else {
@@ -21,22 +20,54 @@ final class MetalView: NSView {
         return layer
     }
 
-    override init(frame frameRect: NSRect) {
+    static func make(frame: NSRect) throws -> MetalView {
         guard let device = MTLCreateSystemDefaultDevice() else {
-            fatalError("Metal is not supported on this device")
+            throw MetalViewError.metalUnavailable
         }
 
-        self.device = device
-        self.renderer = Renderer(
-            device: device,
+        let world = VoxelWorld()
+        let player = PlayerController()
+        let inputController = GameInputController()
+        let drawableSize = makeDrawableSize(for: frame, backingScaleFactor: nil)
+        let renderer = try Renderer(device: device, world: world, drawableSize: drawableSize)
+
+        return MetalView(
+            configuredFrame: frame,
             world: world,
-            drawableSize: Self.makeDrawableSize(for: frameRect, backingScaleFactor: nil))
+            player: player,
+            inputController: inputController,
+            device: device,
+            renderer: renderer)
+    }
+
+    override init(frame frameRect: NSRect) {
+        fatalError("Use MetalView.make(frame:) to build a configured MetalView")
+    }
+
+    private init(
+        configuredFrame frameRect: NSRect,
+        world: VoxelWorld,
+        player: PlayerController,
+        inputController: GameInputController,
+        device: MTLDevice,
+        renderer: Renderer
+    ) {
+        self.world = world
+        self.player = player
+        self.inputController = inputController
+        self.device = device
+        self.renderer = renderer
 
         super.init(frame: frameRect)
 
         wantsLayer = true
         configureMetalLayer()
-        startRenderLoop()
+
+        let gameLoop = GameLoop { [weak self] dt in
+            self?.advanceFrame(dt: dt)
+        }
+        self.gameLoop = gameLoop
+        gameLoop.start()
     }
 
     required init?(coder: NSCoder) {
@@ -64,8 +95,7 @@ final class MetalView: NSView {
 
     override func viewWillMove(toWindow newWindow: NSWindow?) {
         if newWindow == nil {
-            renderTimer?.invalidate()
-            renderTimer = nil
+            gameLoop?.stop()
         }
 
         super.viewWillMove(toWindow: newWindow)
@@ -84,33 +114,14 @@ final class MetalView: NSView {
 
     private func updateDrawableSize() {
         let drawableSize = Self.makeDrawableSize(
-            for: frame, backingScaleFactor: window?.backingScaleFactor)
+            for: frame,
+            backingScaleFactor: window?.backingScaleFactor)
         metalLayer.drawableSize = drawableSize
         renderer.resize(drawableSize: drawableSize)
     }
 
-    private func startRenderLoop() {
-        renderTimer?.invalidate()
-
-        renderTimer = Timer(
-            timeInterval: 1.0 / 60.0,
-            target: self,
-            selector: #selector(tickRenderLoop),
-            userInfo: nil,
-            repeats: true)
-        RunLoop.main.add(renderTimer!, forMode: .common)
-    }
-
-    @objc private func tickRenderLoop() {
-        renderFrame()
-    }
-
-    private func renderFrame() {
+    private func advanceFrame(dt: Float) {
         autoreleasepool {
-            let currentTime = CFAbsoluteTimeGetCurrent()
-            let dt = Float(min(currentTime - lastTime, 0.05))
-            lastTime = currentTime
-
             let lookDelta = inputController.consumeLookDelta()
             player.rotateCamera(deltaX: lookDelta.x, deltaY: lookDelta.y)
             player.update(dt: dt, input: inputController.currentInput, in: world)
@@ -122,5 +133,16 @@ final class MetalView: NSView {
     {
         let scale = backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2.0
         return CGSize(width: frame.width * scale, height: frame.height * scale)
+    }
+}
+
+enum MetalViewError: LocalizedError {
+    case metalUnavailable
+
+    var errorDescription: String? {
+        switch self {
+        case .metalUnavailable:
+            return "Metal is not supported on this device."
+        }
     }
 }

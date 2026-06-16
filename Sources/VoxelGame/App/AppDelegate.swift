@@ -17,13 +17,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.center()
         window.acceptsMouseMovedEvents = true
 
-        let gameView = MetalView(frame: frame)
-        window.contentView = gameView
-        window.makeKeyAndOrderFront(nil)
-        window.makeFirstResponder(gameView)
+        do {
+            let gameView = try MetalView.make(frame: frame)
+            window.contentView = gameView
+            window.makeKeyAndOrderFront(nil)
+            window.makeFirstResponder(gameView)
 
-        self.window = window
-        self.gameView = gameView
+            self.window = window
+            self.gameView = gameView
+        } catch {
+            NSApp.presentError(error)
+            NSApp.terminate(nil)
+            return
+        }
 
         CGDisplayHideCursor(CGMainDisplayID())
         CGAssociateMouseAndMouseCursorPosition(0)

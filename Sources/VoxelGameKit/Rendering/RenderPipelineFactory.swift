@@ -28,16 +28,20 @@ struct RenderPipelineFactory {
         descriptor.colorAttachments[0].pixelFormat = .bgra8Unorm
         descriptor.depthAttachmentPixelFormat = .depth32Float
 
-        return try device.makeRenderPipelineState(descriptor: descriptor)
+        do {
+            return try device.makeRenderPipelineState(descriptor: descriptor)
+        } catch {
+            throw RendererSetupError.pipelineStateUnavailable(error)
+        }
     }
 
-    static func makeDepthState(device: MTLDevice) -> MTLDepthStencilState {
+    static func makeDepthState(device: MTLDevice) throws -> MTLDepthStencilState {
         let descriptor = MTLDepthStencilDescriptor()
         descriptor.depthCompareFunction = .less
         descriptor.isDepthWriteEnabled = true
 
         guard let depthState = device.makeDepthStencilState(descriptor: descriptor) else {
-            fatalError("Failed to create depth stencil state")
+            throw RendererSetupError.depthStateUnavailable
         }
 
         return depthState
