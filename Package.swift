@@ -2,6 +2,10 @@
 
 import PackageDescription
 
+// Package layout:
+// - VoxelGame: thin AppKit executable target.
+// - VoxelGameKit: reusable gameplay/rendering library.
+// - MetalShaderCompiler + BuildMetalShaders: build-time `.metal` -> `.metallib` pipeline.
 let package = Package(
     name: "VoxelGame",
     platforms: [
@@ -30,9 +34,7 @@ let package = Package(
         ),
         .target(
             name: "VoxelGameKit",
-            resources: [
-                .copy("Shaders")
-            ],
+            exclude: ["Shaders"],
             plugins: [
                 .plugin(name: "BuildMetalShaders")
             ]

@@ -16,6 +16,8 @@ struct MetalShaderCompiler {
             at: outputURL.deletingLastPathComponent(),
             withIntermediateDirectories: true)
 
+        // Compile in two stages to match the standard Metal toolchain flow:
+        // `.metal` source -> AIR intermediate -> `.metallib` runtime library.
         let airURL = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString)
             .appendingPathExtension("air")
         let metallibURL = outputURL

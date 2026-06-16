@@ -8,6 +8,8 @@ struct BuildMetalShaders: BuildToolPlugin {
             return []
         }
 
+        // Keep the human-authored shader source in the package, but generate the runtime
+        // `.metallib` into the plugin work directory so SwiftPM bundles the compiled output.
         let shaderSourceURL = sourceModule.directoryURL.appendingPathComponent(
             "Shaders/VoxelShaders.metal")
         guard FileManager.default.fileExists(atPath: shaderSourceURL.path) else {
