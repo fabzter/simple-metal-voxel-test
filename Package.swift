@@ -4,7 +4,7 @@ import PackageDescription
 
 // Package layout:
 // - VoxelGame: thin AppKit executable target.
-// - VoxelGameKit: reusable gameplay/rendering library.
+// - VoxelGameKit: reusable gameplay, world, and rendering code.
 // - MetalShaderCompiler + BuildMetalShaders: build-time `.metal` -> `.metallib` pipeline.
 let package = Package(
     name: "VoxelGame",
@@ -50,6 +50,10 @@ let package = Package(
         .testTarget(
             name: "VoxelGameKitTests",
             dependencies: ["VoxelGameKit"]
+        ),
+        .testTarget(
+            name: "VoxelGameTests",
+            dependencies: ["VoxelGame"]
         ),
     ]
 )

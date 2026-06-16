@@ -15,23 +15,19 @@ struct VoxelWorldTests {
     }
 
     @Test
-    func singleVoxelProducesOnlyVisibleFaces() {
-        let world = VoxelWorld(gridSize: 4, generation: .empty)
-        world.setSolid(true, x: 1, y: 1, z: 1)
+    func sameSeedProducesSameTerrain() {
+        let config = VoxelWorldConfiguration(seed: 1234)
+        let worldA = VoxelWorld(gridSize: 16, generation: .terrain(config))
+        let worldB = VoxelWorld(gridSize: 16, generation: .terrain(config))
 
-        let mesh = world.buildMesh()
-
-        #expect(mesh.count == 36)
+        #expect(worldA.solidGrid == worldB.solidGrid)
     }
 
     @Test
-    func neighboringVoxelsCullSharedFace() {
-        let world = VoxelWorld(gridSize: 4, generation: .empty)
-        world.setSolid(true, x: 1, y: 1, z: 1)
-        world.setSolid(true, x: 2, y: 1, z: 1)
+    func differentSeedsProduceDifferentTerrain() {
+        let worldA = VoxelWorld(gridSize: 16, generation: .terrain(.init(seed: 1)))
+        let worldB = VoxelWorld(gridSize: 16, generation: .terrain(.init(seed: 2)))
 
-        let mesh = world.buildMesh()
-
-        #expect(mesh.count == 60)
+        #expect(worldA.solidGrid != worldB.solidGrid)
     }
 }

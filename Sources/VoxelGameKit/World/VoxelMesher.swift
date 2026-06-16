@@ -1,5 +1,11 @@
 import simd
 
+// `VoxelMesher` translates the abstract voxel grid into triangle data for the GPU.
+//
+// Key idea for beginners:
+// every solid voxel is a cube, but we do NOT draw all 6 faces for all cubes.
+// If one solid cube touches another solid cube, the shared face is hidden inside the world,
+// so we skip it. That is why the mesher checks the 6 neighbors before emitting triangles.
 struct VoxelMesher {
     func makeWorldMesh(for world: VoxelWorld) -> WorldMesh {
         var meshVertices: [Vertex] = []
@@ -35,6 +41,7 @@ struct VoxelMesher {
         return WorldMesh(vertices: meshVertices)
     }
 
+    // A tiny height-based palette so terrain layers are easier to read.
     private func color(for y: Int) -> SIMD3<Float> {
         if y > 15 {
             return SIMD3<Float>(0.2, 0.8, 0.2)
@@ -53,6 +60,8 @@ struct VoxelMesher {
         faceIndex: Int,
         color: SIMD3<Float>
     ) {
+        // Each entry is one quad centered on the voxel origin.
+        // The mesher later turns that quad into two triangles.
         let faces: [[SIMD3<Float>]] = [
             [
                 SIMD3(-0.5, -0.5, 0.5),
@@ -92,6 +101,7 @@ struct VoxelMesher {
             ],
         ]
 
+        // One outward normal per face for simple flat lighting.
         let normals: [SIMD3<Float>] = [
             SIMD3(0, 0, 1),
             SIMD3(0, 0, -1),
@@ -109,6 +119,7 @@ struct VoxelMesher {
         let v2 = offset + quad[2]
         let v3 = offset + quad[3]
 
+        // Two triangles per quad.
         meshVertices.append(Vertex(position: v0, normal: normal, color: color))
         meshVertices.append(Vertex(position: v1, normal: normal, color: color))
         meshVertices.append(Vertex(position: v2, normal: normal, color: color))

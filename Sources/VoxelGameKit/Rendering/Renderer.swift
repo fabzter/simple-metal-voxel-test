@@ -2,6 +2,10 @@ import CoreGraphics
 import Metal
 import QuartzCore
 
+// `Renderer` is the Metal-facing half of the demo.
+//
+// It does not own gameplay state. Instead it receives a camera snapshot each frame and draws
+// a prebuilt world mesh using Metal pipeline/buffer objects prepared at startup.
 public final class Renderer {
   private let device: MTLDevice
   private let commandQueue: MTLCommandQueue
@@ -44,6 +48,8 @@ public final class Renderer {
     resize(drawableSize: drawableSize)
   }
 
+  // The depth texture must always match the drawable size because depth testing happens
+  // pixel-for-pixel alongside the color target.
   public func resize(drawableSize: CGSize) {
     guard drawableSize.width > 0, drawableSize.height > 0 else {
       depthTexture = nil
@@ -74,6 +80,7 @@ public final class Renderer {
       return
     }
 
+    // Update the per-frame camera matrices that the vertex shader reads.
     var uniforms = CameraUniforms(camera: camera, drawableSize: drawableSize).rawValue
     memcpy(uniformsBuffer.contents(), &uniforms, MemoryLayout<Uniforms>.stride)
 

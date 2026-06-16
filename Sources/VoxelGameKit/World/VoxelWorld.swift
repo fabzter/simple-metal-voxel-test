@@ -1,24 +1,28 @@
 public final class VoxelWorld {
-    public enum Generation: Sendable {
-        case proceduralTerrain
+    public enum Generation: Sendable, Equatable {
+        case terrain(VoxelWorldConfiguration)
         case empty
     }
 
     public let gridSize: Int
     public private(set) var solidGrid: [Bool]
 
-    private let terrainGenerator = VoxelTerrainGenerator()
     private let mesher = VoxelMesher()
 
-    public init(gridSize: Int = 64, generation: Generation = .proceduralTerrain) {
+    public init(gridSize: Int = 64, generation: Generation = .terrain(.default)) {
         self.gridSize = gridSize
         self.solidGrid = Array(repeating: false, count: gridSize * gridSize * gridSize)
 
-        if generation == .proceduralTerrain {
-            terrainGenerator.populate(self)
+        switch generation {
+        case .terrain(let configuration):
+            VoxelTerrainGenerator(configuration: configuration).populate(self)
+        case .empty:
+            break
         }
     }
 
+    // The world is stored as a dense 3D boolean grid.
+    // `true` means a voxel cube exists at that integer cell.
     public func isSolid(x: Int, y: Int, z: Int) -> Bool {
         if y < 0 {
             return true
@@ -39,10 +43,13 @@ public final class VoxelWorld {
         solidGrid[index(x: x, y: y, z: z)] = isSolid
     }
 
+    // Convenience used by tests and older call sites.
     func buildMesh() -> [Vertex] {
         makeWorldMesh().vertices
     }
 
+    // Convert the voxel grid into a renderable triangle mesh by keeping only faces that
+    // border empty space.
     func makeWorldMesh() -> WorldMesh {
         mesher.makeWorldMesh(for: self)
     }

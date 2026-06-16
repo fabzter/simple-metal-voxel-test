@@ -18,6 +18,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.acceptsMouseMovedEvents = true
 
         do {
+            // Startup can fail if Metal is unavailable or one of the renderer resources cannot be
+            // created. Surface that cleanly instead of crashing.
             let gameView = try MetalView.make(frame: frame)
             window.contentView = gameView
             window.makeKeyAndOrderFront(nil)

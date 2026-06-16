@@ -12,6 +12,8 @@ final class GameLoop: NSObject {
         self.step = step
     }
 
+    // A tiny fixed-rate host around `Timer`.
+    // Every tick measures real elapsed time, clamps it, then hands `dt` to the scene/update code.
     func start() {
         stop()
         lastTime = CFAbsoluteTimeGetCurrent()

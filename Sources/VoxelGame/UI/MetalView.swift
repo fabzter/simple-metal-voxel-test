@@ -5,8 +5,7 @@ import VoxelGameKit
 
 @MainActor
 final class MetalView: NSView {
-    private let world: VoxelWorld
-    private let player: PlayerController
+    private let scene: GameScene
     private let inputController: GameInputController
     private let device: MTLDevice
     private let renderer: Renderer
@@ -20,21 +19,24 @@ final class MetalView: NSView {
         return layer
     }
 
-    static func make(frame: NSRect) throws -> MetalView {
-        guard let device = MTLCreateSystemDefaultDevice() else {
+    // Factory entry point used by app startup and tests.
+    // `deviceProvider` is injectable so tests can exercise the “no Metal available” path.
+    static func make(
+        frame: NSRect,
+        deviceProvider: () -> MTLDevice? = MTLCreateSystemDefaultDevice
+    ) throws -> MetalView {
+        guard let device = deviceProvider() else {
             throw MetalViewError.metalUnavailable
         }
 
-        let world = VoxelWorld()
-        let player = PlayerController()
+        let scene = GameScene()
         let inputController = GameInputController()
         let drawableSize = makeDrawableSize(for: frame, backingScaleFactor: nil)
-        let renderer = try Renderer(device: device, world: world, drawableSize: drawableSize)
+        let renderer = try Renderer(device: device, world: scene.world, drawableSize: drawableSize)
 
         return MetalView(
             configuredFrame: frame,
-            world: world,
-            player: player,
+            scene: scene,
             inputController: inputController,
             device: device,
             renderer: renderer)
@@ -46,14 +48,12 @@ final class MetalView: NSView {
 
     private init(
         configuredFrame frameRect: NSRect,
-        world: VoxelWorld,
-        player: PlayerController,
+        scene: GameScene,
         inputController: GameInputController,
         device: MTLDevice,
         renderer: Renderer
     ) {
-        self.world = world
-        self.player = player
+        self.scene = scene
         self.inputController = inputController
         self.device = device
         self.renderer = renderer
@@ -123,9 +123,8 @@ final class MetalView: NSView {
     private func advanceFrame(dt: Float) {
         autoreleasepool {
             let lookDelta = inputController.consumeLookDelta()
-            player.rotateCamera(deltaX: lookDelta.x, deltaY: lookDelta.y)
-            player.update(dt: dt, input: inputController.currentInput, in: world)
-            renderer.render(into: metalLayer, camera: player.camera)
+            scene.update(dt: dt, input: inputController.currentInput, lookDelta: lookDelta)
+            renderer.render(into: metalLayer, camera: scene.camera)
         }
     }
 
@@ -136,7 +135,7 @@ final class MetalView: NSView {
     }
 }
 
-enum MetalViewError: LocalizedError {
+enum MetalViewError: LocalizedError, Equatable {
     case metalUnavailable
 
     var errorDescription: String? {

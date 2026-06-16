@@ -1,5 +1,7 @@
 import Foundation
 
+// These are startup-time errors: they happen while wiring Metal together before the first
+// frame can be drawn. The app surfaces them to the user instead of crashing blindly.
 public enum RendererSetupError: LocalizedError {
     case commandQueueUnavailable
     case uniformsBufferUnavailable
