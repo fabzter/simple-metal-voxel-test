@@ -9,8 +9,10 @@ final class MetalView: NSView {
     private let inputController: GameInputController
     private let device: MTLDevice
     private let renderer: Renderer
+    private let debugHUDView: DebugHUDView
 
     private var gameLoop: GameLoop?
+    private var hasPresentedRuntimeError = false
 
     private var metalLayer: CAMetalLayer {
         guard let layer = layer as? CAMetalLayer else {
@@ -33,13 +35,15 @@ final class MetalView: NSView {
         let inputController = GameInputController()
         let drawableSize = makeDrawableSize(for: frame, backingScaleFactor: nil)
         let renderer = try Renderer(device: device, world: scene.world, drawableSize: drawableSize)
+        let debugHUDView = DebugHUDView(frame: .zero)
 
         return MetalView(
             configuredFrame: frame,
             scene: scene,
             inputController: inputController,
             device: device,
-            renderer: renderer)
+            renderer: renderer,
+            debugHUDView: debugHUDView)
     }
 
     override init(frame frameRect: NSRect) {
@@ -51,17 +55,21 @@ final class MetalView: NSView {
         scene: GameScene,
         inputController: GameInputController,
         device: MTLDevice,
-        renderer: Renderer
+        renderer: Renderer,
+        debugHUDView: DebugHUDView
     ) {
         self.scene = scene
         self.inputController = inputController
         self.device = device
         self.renderer = renderer
+        self.debugHUDView = debugHUDView
 
         super.init(frame: frameRect)
 
         wantsLayer = true
         configureMetalLayer()
+        configureDebugHUD()
+        updateDebugHUD()
 
         let gameLoop = GameLoop { [weak self] dt in
             self?.advanceFrame(dt: dt)
@@ -112,6 +120,15 @@ final class MetalView: NSView {
         updateDrawableSize()
     }
 
+    private func configureDebugHUD() {
+        addSubview(debugHUDView)
+
+        NSLayoutConstraint.activate([
+            debugHUDView.topAnchor.constraint(equalTo: topAnchor, constant: 12),
+            debugHUDView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+        ])
+    }
+
     private func updateDrawableSize() {
         let drawableSize = Self.makeDrawableSize(
             for: frame,
@@ -124,8 +141,28 @@ final class MetalView: NSView {
         autoreleasepool {
             let lookDelta = inputController.consumeLookDelta()
             scene.update(dt: dt, input: inputController.currentInput, lookDelta: lookDelta)
-            renderer.render(into: metalLayer, camera: scene.camera)
+
+            do {
+                try renderer.render(into: metalLayer, world: scene.world, camera: scene.camera)
+                updateDebugHUD()
+            } catch {
+                presentRuntimeErrorOnce(error)
+            }
         }
+    }
+
+    private func updateDebugHUD() {
+        debugHUDView.update(snapshot: DebugHUDSnapshot(scene: scene, renderer: renderer))
+    }
+
+    private func presentRuntimeErrorOnce(_ error: Error) {
+        guard !hasPresentedRuntimeError else {
+            return
+        }
+
+        hasPresentedRuntimeError = true
+        gameLoop?.stop()
+        NSApp.presentError(error)
     }
 
     private static func makeDrawableSize(for frame: NSRect, backingScaleFactor: CGFloat?) -> CGSize

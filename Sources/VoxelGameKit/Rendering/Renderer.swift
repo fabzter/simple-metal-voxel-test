@@ -5,18 +5,29 @@ import QuartzCore
 // `Renderer` is the Metal-facing half of the demo.
 //
 // It does not own gameplay state. Instead it receives a camera snapshot each frame and draws
-// a prebuilt world mesh using Metal pipeline/buffer objects prepared at startup.
+// the current world mesh using Metal pipeline/buffer objects prepared at startup.
 public final class Renderer {
   private let device: MTLDevice
   private let commandQueue: MTLCommandQueue
   private let pipelineState: MTLRenderPipelineState
   private let depthState: MTLDepthStencilState
-  private let meshBuffers: MeshBuffers
+  private let projectionConfiguration: ProjectionConfiguration
   private let uniformsBuffer: MTLBuffer
 
+  private var meshBuffers: MeshBuffers
+  private var synchronizedMeshRevision: UInt64
   private var depthTexture: MTLTexture?
 
-  public init(device: MTLDevice, world: VoxelWorld, drawableSize: CGSize) throws {
+  public var currentVertexCount: Int {
+    meshBuffers.vertexCount
+  }
+
+  public init(
+    device: MTLDevice,
+    world: VoxelWorld,
+    drawableSize: CGSize,
+    projectionConfiguration: ProjectionConfiguration = .default
+  ) throws {
     guard let commandQueue = device.makeCommandQueue() else {
       throw RendererSetupError.commandQueueUnavailable
     }
@@ -42,7 +53,9 @@ public final class Renderer {
       device: device,
       library: shaderLibrary.library)
     self.depthState = try RenderPipelineFactory.makeDepthState(device: device)
+    self.projectionConfiguration = projectionConfiguration
     self.meshBuffers = try MeshBuffers(device: device, mesh: world.makeWorldMesh())
+    self.synchronizedMeshRevision = world.meshRevision
     self.uniformsBuffer = uniformsBuffer
 
     resize(drawableSize: drawableSize)
@@ -67,7 +80,11 @@ public final class Renderer {
     depthTexture = device.makeTexture(descriptor: descriptor)
   }
 
-  public func render(into metalLayer: CAMetalLayer, camera: CameraState) {
+  // Before drawing, the renderer checks whether the voxel grid changed. If it did, a fresh
+  // mesh is generated and uploaded to the GPU so the picture matches the current world.
+  public func render(into metalLayer: CAMetalLayer, world: VoxelWorld, camera: CameraState) throws {
+    try synchronizeWorldMeshIfNeeded(with: world)
+
     guard let drawable = metalLayer.nextDrawable(),
       let commandBuffer = commandQueue.makeCommandBuffer(),
       let depthTexture
@@ -81,7 +98,11 @@ public final class Renderer {
     }
 
     // Update the per-frame camera matrices that the vertex shader reads.
-    var uniforms = CameraUniforms(camera: camera, drawableSize: drawableSize).rawValue
+    var uniforms = CameraUniforms(
+      camera: camera,
+      projectionConfiguration: projectionConfiguration,
+      drawableSize: drawableSize
+    ).rawValue
     memcpy(uniformsBuffer.contents(), &uniforms, MemoryLayout<Uniforms>.stride)
 
     let passDescriptor = MTLRenderPassDescriptor()
@@ -112,5 +133,14 @@ public final class Renderer {
 
     commandBuffer.present(drawable)
     commandBuffer.commit()
+  }
+
+  private func synchronizeWorldMeshIfNeeded(with world: VoxelWorld) throws {
+    guard synchronizedMeshRevision != world.meshRevision else {
+      return
+    }
+
+    meshBuffers = try MeshBuffers(device: device, mesh: world.makeWorldMesh())
+    synchronizedMeshRevision = world.meshRevision
   }
 }

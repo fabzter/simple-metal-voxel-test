@@ -6,6 +6,7 @@ public final class PlayerController {
     public let moveSpeed: Float
     public let playerHeight: Float
     public let playerRadius: Float
+    public let cameraConfiguration: CameraConfiguration
 
     public private(set) var position: SIMD3<Float>
     public private(set) var velocity: SIMD3<Float>
@@ -15,7 +16,7 @@ public final class PlayerController {
 
     public var camera: CameraState {
         CameraState(
-            position: position + SIMD3<Float>(0, 1.6, 0),
+            position: position + SIMD3<Float>(0, cameraConfiguration.eyeHeight, 0),
             yaw: cameraYaw,
             pitch: cameraPitch)
     }
@@ -30,7 +31,8 @@ public final class PlayerController {
         jumpSpeed: Float = 9.0,
         moveSpeed: Float = 6.0,
         playerHeight: Float = 1.8,
-        playerRadius: Float = 0.3
+        playerRadius: Float = 0.3,
+        cameraConfiguration: CameraConfiguration = .default
     ) {
         self.position = position
         self.velocity = velocity
@@ -42,12 +44,15 @@ public final class PlayerController {
         self.moveSpeed = moveSpeed
         self.playerHeight = playerHeight
         self.playerRadius = playerRadius
+        self.cameraConfiguration = cameraConfiguration
     }
 
     public func rotateCamera(deltaX: Float, deltaY: Float) {
-        cameraYaw += deltaX * 0.005
-        cameraPitch += deltaY * 0.005
-        cameraPitch = min(max(cameraPitch, -1.5), 1.5)
+        cameraYaw += deltaX * cameraConfiguration.lookSensitivity
+        cameraPitch += deltaY * cameraConfiguration.lookSensitivity
+        cameraPitch = min(
+            max(cameraPitch, cameraConfiguration.minimumPitch),
+            cameraConfiguration.maximumPitch)
     }
 
     public func update(dt: Float, input: PlayerInput, in world: VoxelWorld) {

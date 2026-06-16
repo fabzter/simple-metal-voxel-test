@@ -5,13 +5,17 @@ struct CameraUniforms {
     let projection: float4x4
     let view: float4x4
 
-    init(camera: CameraState, drawableSize: CGSize) {
+    init(
+        camera: CameraState,
+        projectionConfiguration: ProjectionConfiguration,
+        drawableSize: CGSize
+    ) {
         let aspect = Float(drawableSize.width / drawableSize.height)
         projection = float4x4.perspective(
-            fov: 65.0 * (.pi / 180.0),
+            fov: projectionConfiguration.fieldOfViewDegrees * (.pi / 180.0),
             aspect: aspect,
-            near: 0.1,
-            far: 1000.0)
+            near: projectionConfiguration.nearClip,
+            far: projectionConfiguration.farClip)
         view =
             float4x4(rotationX: camera.pitch)
             * float4x4(rotationY: camera.yaw)

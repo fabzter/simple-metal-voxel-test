@@ -5,12 +5,15 @@ public final class VoxelWorld {
     }
 
     public let gridSize: Int
+    public let generation: Generation
     public private(set) var solidGrid: [Bool]
+    public private(set) var meshRevision: UInt64 = 0
 
     private let mesher = VoxelMesher()
 
     public init(gridSize: Int = 64, generation: Generation = .terrain(.default)) {
         self.gridSize = gridSize
+        self.generation = generation
         self.solidGrid = Array(repeating: false, count: gridSize * gridSize * gridSize)
 
         switch generation {
@@ -19,6 +22,8 @@ public final class VoxelWorld {
         case .empty:
             break
         }
+
+        meshRevision = 0
     }
 
     // The world is stored as a dense 3D boolean grid.
@@ -35,12 +40,20 @@ public final class VoxelWorld {
         return solidGrid[index(x: x, y: y, z: z)]
     }
 
+    // Any real change to the voxel grid increments `meshRevision`.
+    // The renderer watches that number and rebuilds GPU mesh buffers when needed.
     public func setSolid(_ isSolid: Bool, x: Int, y: Int, z: Int) {
         guard x >= 0, x < gridSize, y >= 0, y < gridSize, z >= 0, z < gridSize else {
             return
         }
 
-        solidGrid[index(x: x, y: y, z: z)] = isSolid
+        let cellIndex = index(x: x, y: y, z: z)
+        guard solidGrid[cellIndex] != isSolid else {
+            return
+        }
+
+        solidGrid[cellIndex] = isSolid
+        meshRevision &+= 1
     }
 
     // Convenience used by tests and older call sites.

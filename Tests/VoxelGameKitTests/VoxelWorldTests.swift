@@ -30,4 +30,20 @@ struct VoxelWorldTests {
 
         #expect(worldA.solidGrid != worldB.solidGrid)
     }
+
+    @Test
+    func meshRevisionChangesOnlyForRealVoxelEdits() {
+        let world = VoxelWorld(gridSize: 8, generation: .empty)
+
+        #expect(world.meshRevision == 0)
+
+        world.setSolid(true, x: 1, y: 1, z: 1)
+        #expect(world.meshRevision == 1)
+
+        world.setSolid(true, x: 1, y: 1, z: 1)
+        #expect(world.meshRevision == 1)
+
+        world.setSolid(false, x: 1, y: 1, z: 1)
+        #expect(world.meshRevision == 2)
+    }
 }
