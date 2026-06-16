@@ -1,5 +1,4 @@
-# 1. Compile with aggressive optimization (-O) for Apple Silicon
-swiftc -O -o VoxelGame voxel_game.swift -framework Cocoa -framework Metal -framework CoreGraphics
+#!/bin/sh
+set -eu
 
-# 2. Run the game
-./VoxelGame
+swift run -c release VoxelGame
