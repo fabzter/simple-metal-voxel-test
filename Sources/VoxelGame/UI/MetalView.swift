@@ -176,7 +176,8 @@ final class MetalView: NSView {
                     into: metalLayer,
                     world: scene.world,
                     camera: scene.camera,
-                    selectedHit: scene.currentTarget)
+                    selectedHit: scene.currentTarget,
+                    editFeedback: scene.currentEditFeedback)
                 updateOverlayViews(frameTimeSeconds: dt)
             } catch {
                 presentRuntimeErrorOnce(error)

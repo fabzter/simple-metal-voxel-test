@@ -80,6 +80,19 @@ public final class VoxelWorld {
         chunkRevisions[chunkIndex, default: 0]
     }
 
+    func chunkIndex(containing cell: VoxelIndex) -> VoxelChunkIndex? {
+        guard cell.x >= 0, cell.x < gridSize, cell.y >= 0, cell.y < gridSize, cell.z >= 0,
+            cell.z < gridSize
+        else {
+            return nil
+        }
+
+        return VoxelChunkIndex(
+            x: cell.x / chunkSize,
+            y: cell.y / chunkSize,
+            z: cell.z / chunkSize)
+    }
+
     // Convenience used by tests and older call sites.
     func buildMesh() -> [Vertex] {
         chunkIndices.flatMap { makeWorldMesh(for: $0).vertices }

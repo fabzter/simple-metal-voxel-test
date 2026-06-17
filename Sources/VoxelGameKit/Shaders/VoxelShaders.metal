@@ -22,6 +22,7 @@ struct Uniforms {
     float4x4 view;
     float materialDebugMode;
     float3 padding;
+    float4 highlightColor;
 };
 
 vertex VertexOut vertex_main(VertexIn in [[stage_in]],
@@ -77,6 +78,6 @@ vertex HighlightVertexOut vertex_highlight(HighlightVertexIn in [[stage_in]],
     return out;
 }
 
-fragment float4 fragment_highlight() {
-    return float4(1.0, 0.9, 0.2, 1.0);
+fragment float4 fragment_highlight(constant Uniforms& uniforms [[buffer(1)]]) {
+    return uniforms.highlightColor;
 }

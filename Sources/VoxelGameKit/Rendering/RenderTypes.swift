@@ -20,6 +20,7 @@ struct Uniforms {
     let view: float4x4
     let materialDebugMode: Float
     let padding: SIMD3<Float>
+    let highlightColor: SIMD4<Float>
 }
 
 enum MaterialMode: Float {

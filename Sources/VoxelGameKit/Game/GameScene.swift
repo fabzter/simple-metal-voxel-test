@@ -6,6 +6,7 @@ import simd
 // - the voxel world the player collides with and edits
 // - the player/controller state
 // - the currently targeted block under the crosshair
+// - the most recent edit feedback pulse
 //
 // The renderer reads data from the scene, but the scene itself is independent of Metal.
 // That separation keeps game logic testable without needing a GPU.
@@ -16,6 +17,7 @@ public final class GameScene {
     private let raycaster = VoxelRaycaster()
 
     public private(set) var currentTarget: VoxelRaycastHit?
+    public private(set) var currentEditFeedback: EditFeedback?
 
     public var camera: CameraState {
         player.camera
@@ -45,6 +47,7 @@ public final class GameScene {
         player.rotateCamera(deltaX: lookDelta.x, deltaY: lookDelta.y)
         player.update(dt: dt, input: input, in: world)
         currentTarget = raycaster.raycast(camera: camera, in: world)
+        advanceEditFeedback(dt: dt)
 
         for editAction in editActions {
             apply(editAction)
@@ -61,6 +64,8 @@ public final class GameScene {
         switch editAction {
         case .remove:
             world.setSolid(false, x: hit.solidCell.x, y: hit.solidCell.y, z: hit.solidCell.z)
+            currentEditFeedback = EditFeedback(kind: .remove, hit: hit)
+
         case .place:
             let placementCell = hit.placementCell ?? inferredPlacementCell(from: hit)
 
@@ -69,6 +74,14 @@ public final class GameScene {
             }
 
             world.setSolid(true, x: placementCell.x, y: placementCell.y, z: placementCell.z)
+
+            let placementFace = hit.face?.opposite
+            let placementHit = VoxelRaycastHit(
+                solidCell: placementCell,
+                placementCell: hit.solidCell,
+                face: placementFace,
+                distance: hit.distance)
+            currentEditFeedback = EditFeedback(kind: .place, hit: placementHit)
         }
     }
 
@@ -101,5 +114,14 @@ public final class GameScene {
         let overlapsY = voxelMin.y <= playerMax.y && voxelMax.y >= playerMin.y
         let overlapsZ = voxelMin.z <= playerMax.z && voxelMax.z >= playerMin.z
         return overlapsX && overlapsY && overlapsZ
+    }
+
+    private func advanceEditFeedback(dt: Float) {
+        guard var currentEditFeedback else {
+            return
+        }
+
+        currentEditFeedback.remainingTime -= dt
+        self.currentEditFeedback = currentEditFeedback.remainingTime > 0 ? currentEditFeedback : nil
     }
 }

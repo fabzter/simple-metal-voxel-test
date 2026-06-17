@@ -16,11 +16,12 @@ public final class Renderer {
   private let projectionConfiguration: ProjectionConfiguration
   private let uniformsBuffer: MTLBuffer
   private let materialAtlas: MaterialAtlas
+  private let occlusionCuller = ChunkOcclusionCuller()
 
   private var chunkMeshBuffers: [VoxelChunkIndex: MeshBuffers]
   private var synchronizedChunkRevisions: [VoxelChunkIndex: UInt64]
   private var selectionBuffer: MTLBuffer?
-  private var selectedHit: VoxelRaycastHit?
+  private var overlayHit: VoxelRaycastHit?
   private var depthTexture: MTLTexture?
 
   public var materialDebugMode: MaterialDebugMode = .hybrid
@@ -95,10 +96,12 @@ public final class Renderer {
     into metalLayer: CAMetalLayer,
     world: VoxelWorld,
     camera: CameraState,
-    selectedHit: VoxelRaycastHit?
+    selectedHit: VoxelRaycastHit?,
+    editFeedback: EditFeedback?
   ) throws {
     try synchronizeWorldMeshIfNeeded(with: world)
-    try synchronizeSelectionBuffer(for: selectedHit)
+    let activeOverlayHit = editFeedback?.hit ?? selectedHit
+    try synchronizeSelectionBuffer(for: activeOverlayHit)
 
     guard let drawable = metalLayer.nextDrawable(),
       let commandBuffer = commandQueue.makeCommandBuffer(),
@@ -112,11 +115,14 @@ public final class Renderer {
       return
     }
 
+    let highlightColor = makeHighlightColor(editFeedback: editFeedback)
     let cameraUniforms = CameraUniforms(
       camera: camera,
       projectionConfiguration: projectionConfiguration,
       drawableSize: drawableSize)
-    var uniforms = cameraUniforms.rawValue(materialDebugMode: materialDebugMode)
+    var uniforms = cameraUniforms.rawValue(
+      materialDebugMode: materialDebugMode,
+      highlightColor: highlightColor)
     memcpy(uniformsBuffer.contents(), &uniforms, MemoryLayout<Uniforms>.stride)
 
     let frustumCuller = FrustumCuller(
@@ -154,6 +160,9 @@ public final class Renderer {
 
       let bounds = ChunkBounds.bounds(for: chunkIndex, chunkSize: world.chunkSize)
       guard frustumCuller.isVisible(bounds: bounds) else {
+        continue
+      }
+      guard occlusionCuller.isVisible(chunkIndex: chunkIndex, world: world, camera: camera) else {
         continue
       }
 
@@ -202,22 +211,22 @@ public final class Renderer {
     }
   }
 
-  private func synchronizeSelectionBuffer(for selectedHit: VoxelRaycastHit?) throws {
+  private func synchronizeSelectionBuffer(for overlayHit: VoxelRaycastHit?) throws {
     let changedSelection =
-      selectedHit?.solidCell != self.selectedHit?.solidCell
-      || selectedHit?.face?.label != self.selectedHit?.face?.label
+      overlayHit?.solidCell != self.overlayHit?.solidCell
+      || overlayHit?.face?.label != self.overlayHit?.face?.label
     guard changedSelection else {
       return
     }
 
-    self.selectedHit = selectedHit
+    self.overlayHit = overlayHit
 
-    guard let selectedHit, let face = selectedHit.face else {
+    guard let overlayHit, let face = overlayHit.face else {
       selectionBuffer = nil
       return
     }
 
-    let vertices = SelectionHighlightMesh(cell: selectedHit.solidCell, face: face).vertices
+    let vertices = SelectionHighlightMesh(cell: overlayHit.solidCell, face: face).vertices
     guard
       let buffer = device.makeBuffer(
         bytes: vertices,
@@ -228,5 +237,19 @@ public final class Renderer {
     }
 
     selectionBuffer = buffer
+  }
+
+  private func makeHighlightColor(editFeedback: EditFeedback?) -> SIMD4<Float> {
+    guard let editFeedback else {
+      return SIMD4<Float>(1.0, 0.9, 0.2, 1.0)
+    }
+
+    let pulse = 0.65 + 0.35 * sin((0.18 - editFeedback.remainingTime) * 36.0)
+    switch editFeedback.kind {
+    case .remove:
+      return SIMD4<Float>(1.0 * pulse, 0.35, 0.25, 1.0)
+    case .place:
+      return SIMD4<Float>(0.35, 1.0 * pulse, 0.35, 1.0)
+    }
   }
 }

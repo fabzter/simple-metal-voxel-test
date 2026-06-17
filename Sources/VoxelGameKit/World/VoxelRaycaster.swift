@@ -15,26 +15,38 @@ struct VoxelRaycaster {
     }
 
     func raycast(camera: CameraState, in world: VoxelWorld) -> VoxelRaycastHit? {
-        let direction = camera.forward
-        let startPoint = camera.position + direction * startDistance + SIMD3<Float>(repeating: 0.5)
+        raycast(
+            origin: camera.position, direction: camera.forward, startDistance: startDistance,
+            maxDistance: maxDistance, in: world)
+    }
+
+    func raycast(
+        origin: SIMD3<Float>,
+        direction: SIMD3<Float>,
+        startDistance: Float = 0,
+        maxDistance: Float,
+        in world: VoxelWorld
+    ) -> VoxelRaycastHit? {
+        let normalizedDirection = normalize(direction)
+        let startPoint = origin + normalizedDirection * startDistance + SIMD3<Float>(repeating: 0.5)
 
         var currentCell = VoxelIndex(pointInShiftedGrid: startPoint)
         var previousEmptyCell: VoxelIndex?
 
-        let stepX = step(for: direction.x)
-        let stepY = step(for: direction.y)
-        let stepZ = step(for: direction.z)
+        let stepX = step(for: normalizedDirection.x)
+        let stepY = step(for: normalizedDirection.y)
+        let stepZ = step(for: normalizedDirection.z)
 
         var tMaxX = initialBoundaryDistance(
-            origin: startPoint.x, direction: direction.x, cell: currentCell.x)
+            origin: startPoint.x, direction: normalizedDirection.x, cell: currentCell.x)
         var tMaxY = initialBoundaryDistance(
-            origin: startPoint.y, direction: direction.y, cell: currentCell.y)
+            origin: startPoint.y, direction: normalizedDirection.y, cell: currentCell.y)
         var tMaxZ = initialBoundaryDistance(
-            origin: startPoint.z, direction: direction.z, cell: currentCell.z)
+            origin: startPoint.z, direction: normalizedDirection.z, cell: currentCell.z)
 
-        let tDeltaX = boundaryStride(direction: direction.x)
-        let tDeltaY = boundaryStride(direction: direction.y)
-        let tDeltaZ = boundaryStride(direction: direction.z)
+        let tDeltaX = boundaryStride(direction: normalizedDirection.x)
+        let tDeltaY = boundaryStride(direction: normalizedDirection.y)
+        let tDeltaZ = boundaryStride(direction: normalizedDirection.z)
 
         var traveled: Float = startDistance
         var hitFace: VoxelFace?
@@ -44,7 +56,8 @@ struct VoxelRaycaster {
                 return VoxelRaycastHit(
                     solidCell: currentCell,
                     placementCell: previousEmptyCell,
-                    face: hitFace)
+                    face: hitFace,
+                    distance: traveled)
             }
 
             previousEmptyCell = currentCell
@@ -103,6 +116,7 @@ public struct VoxelRaycastHit {
     public let solidCell: VoxelIndex
     public let placementCell: VoxelIndex?
     public let face: VoxelFace?
+    public let distance: Float
 }
 
 public struct VoxelIndex: Equatable, Sendable {
@@ -114,13 +128,6 @@ public struct VoxelIndex: Equatable, Sendable {
         self.x = x
         self.y = y
         self.z = z
-    }
-
-    init(point: SIMD3<Float>) {
-        self.init(
-            x: Int(floor(point.x + 0.5)),
-            y: Int(floor(point.y + 0.5)),
-            z: Int(floor(point.z + 0.5)))
     }
 
     init(pointInShiftedGrid: SIMD3<Float>) {
@@ -158,6 +165,17 @@ public enum VoxelFace: Sendable {
         case .bottom: return SIMD3(0, -1, 0)
         case .left: return SIMD3(-1, 0, 0)
         case .right: return SIMD3(1, 0, 0)
+        }
+    }
+
+    public var opposite: VoxelFace {
+        switch self {
+        case .front: return .back
+        case .back: return .front
+        case .top: return .bottom
+        case .bottom: return .top
+        case .left: return .right
+        case .right: return .left
         }
     }
 
