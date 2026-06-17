@@ -8,11 +8,22 @@ import simd
 // so we skip it. That is why the mesher checks the 6 neighbors before emitting triangles.
 struct VoxelMesher {
     func makeWorldMesh(for world: VoxelWorld) -> WorldMesh {
+        WorldMesh(
+            vertices: world.allChunkIndices().flatMap {
+                makeWorldMesh(for: world, chunkIndex: $0).vertices
+            })
+    }
+
+    func makeWorldMesh(for world: VoxelWorld, chunkIndex: VoxelChunkIndex) -> WorldMesh {
         var meshVertices: [Vertex] = []
 
-        for x in 0..<world.gridSize {
-            for y in 0..<world.gridSize {
-                for z in 0..<world.gridSize where world.isSolid(x: x, y: y, z: z) {
+        let xRange = chunkRange(chunkIndex.x, chunkSize: world.chunkSize, gridSize: world.gridSize)
+        let yRange = chunkRange(chunkIndex.y, chunkSize: world.chunkSize, gridSize: world.gridSize)
+        let zRange = chunkRange(chunkIndex.z, chunkSize: world.chunkSize, gridSize: world.gridSize)
+
+        for x in xRange {
+            for y in yRange {
+                for z in zRange where world.isSolid(x: x, y: y, z: z) {
                     let position = SIMD3<Float>(Float(x), Float(y), Float(z))
 
                     if !world.isSolid(x: x, y: y + 1, z: z) {
@@ -52,12 +63,18 @@ struct VoxelMesher {
         return WorldMesh(vertices: meshVertices)
     }
 
+    private func chunkRange(_ chunkComponent: Int, chunkSize: Int, gridSize: Int) -> Range<Int> {
+        let start = chunkComponent * chunkSize
+        let end = min(start + chunkSize, gridSize)
+        return start..<end
+    }
+
     private func material(for y: Int, faceIndex: Int) -> FaceMaterial {
         let isTop = faceIndex == 2
         let isBottom = faceIndex == 3
 
         if isTop && y >= 22 {
-            return .flat(color: SIMD3<Float>(0.92, 0.92, 0.98))
+            return .flat(color: SIMD3<Float>(0.92, 0.92, 0.98), previewTile: .stone)
         }
 
         if isTop && y >= 14 {
@@ -65,7 +82,7 @@ struct VoxelMesher {
         }
 
         if isBottom {
-            return .flat(color: SIMD3<Float>(0.22, 0.20, 0.18))
+            return .flat(color: SIMD3<Float>(0.22, 0.20, 0.18), previewTile: .dirt)
         }
 
         if y >= 14 {
@@ -76,7 +93,7 @@ struct VoxelMesher {
             return .textured(tile: .moss, tint: SIMD3<Float>(0.95, 0.95, 0.95))
         }
 
-        return .flat(color: SIMD3<Float>(0.50, 0.50, 0.55))
+        return .flat(color: SIMD3<Float>(0.50, 0.50, 0.55), previewTile: .stone)
     }
 
     private func appendFace(
@@ -156,13 +173,13 @@ struct VoxelMesher {
 }
 
 private enum FaceMaterial {
-    case flat(color: SIMD3<Float>)
+    case flat(color: SIMD3<Float>, previewTile: MaterialAtlas.Tile)
     case textured(tile: MaterialAtlas.Tile, tint: SIMD3<Float>)
 
     var uvQuad: [SIMD2<Float>] {
         switch self {
-        case .flat:
-            return Array(repeating: .zero, count: 4)
+        case .flat(_, let previewTile):
+            return MaterialAtlas.region(for: previewTile).quadUVs
         case .textured(let tile, _):
             return MaterialAtlas.region(for: tile).quadUVs
         }
@@ -170,7 +187,7 @@ private enum FaceMaterial {
 
     func vertex(position: SIMD3<Float>, normal: SIMD3<Float>, uv: SIMD2<Float>) -> Vertex {
         switch self {
-        case .flat(let color):
+        case .flat(let color, _):
             return Vertex(
                 position: position,
                 normal: normal,

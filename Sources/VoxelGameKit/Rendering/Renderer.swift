@@ -10,17 +10,22 @@ public final class Renderer {
   private let device: MTLDevice
   private let commandQueue: MTLCommandQueue
   private let pipelineState: MTLRenderPipelineState
+  private let highlightPipelineState: MTLRenderPipelineState
   private let depthState: MTLDepthStencilState
   private let projectionConfiguration: ProjectionConfiguration
   private let uniformsBuffer: MTLBuffer
   private let materialAtlas: MaterialAtlas
 
-  private var meshBuffers: MeshBuffers
-  private var synchronizedMeshRevision: UInt64
+  private var chunkMeshBuffers: [VoxelChunkIndex: MeshBuffers]
+  private var synchronizedChunkRevisions: [VoxelChunkIndex: UInt64]
+  private var selectionBuffer: MTLBuffer?
+  private var selectedCell: VoxelIndex?
   private var depthTexture: MTLTexture?
 
+  public var materialDebugMode: MaterialDebugMode = .hybrid
+
   public var currentVertexCount: Int {
-    meshBuffers.vertexCount
+    chunkMeshBuffers.values.reduce(0) { $0 + $1.vertexCount }
   }
 
   public init(
@@ -53,13 +58,17 @@ public final class Renderer {
     self.pipelineState = try RenderPipelineFactory.makePipelineState(
       device: device,
       library: shaderLibrary.library)
+    self.highlightPipelineState = try RenderPipelineFactory.makeHighlightPipelineState(
+      device: device,
+      library: shaderLibrary.library)
     self.depthState = try RenderPipelineFactory.makeDepthState(device: device)
     self.projectionConfiguration = projectionConfiguration
     self.uniformsBuffer = uniformsBuffer
     self.materialAtlas = try MaterialAtlas(device: device)
-    self.meshBuffers = try MeshBuffers(device: device, mesh: world.makeWorldMesh())
-    self.synchronizedMeshRevision = world.meshRevision
+    self.chunkMeshBuffers = [:]
+    self.synchronizedChunkRevisions = [:]
 
+    try rebuildAllChunks(for: world)
     resize(drawableSize: drawableSize)
   }
 
@@ -82,10 +91,16 @@ public final class Renderer {
     depthTexture = device.makeTexture(descriptor: descriptor)
   }
 
-  // Before drawing, the renderer checks whether the voxel grid changed. If it did, a fresh
-  // mesh is generated and uploaded to the GPU so the picture matches the current world.
-  public func render(into metalLayer: CAMetalLayer, world: VoxelWorld, camera: CameraState) throws {
+  // Before drawing, the renderer checks whether the voxel grid changed. If it did, only the
+  // affected chunk meshes are regenerated and re-uploaded.
+  public func render(
+    into metalLayer: CAMetalLayer,
+    world: VoxelWorld,
+    camera: CameraState,
+    selectedCell: VoxelIndex?
+  ) throws {
     try synchronizeWorldMeshIfNeeded(with: world)
+    try synchronizeSelectionBuffer(for: selectedCell)
 
     guard let drawable = metalLayer.nextDrawable(),
       let commandBuffer = commandQueue.makeCommandBuffer(),
@@ -104,7 +119,7 @@ public final class Renderer {
       camera: camera,
       projectionConfiguration: projectionConfiguration,
       drawableSize: drawableSize
-    ).rawValue
+    ).rawValue(materialDebugMode: materialDebugMode)
     memcpy(uniformsBuffer.contents(), &uniforms, MemoryLayout<Uniforms>.stride)
 
     let passDescriptor = MTLRenderPassDescriptor()
@@ -128,22 +143,79 @@ public final class Renderer {
 
     encoder.setRenderPipelineState(pipelineState)
     encoder.setDepthStencilState(depthState)
-    encoder.setVertexBuffer(meshBuffers.vertexBuffer, offset: 0, index: 0)
     encoder.setVertexBuffer(uniformsBuffer, offset: 0, index: 1)
     encoder.setFragmentTexture(materialAtlas.texture, index: 0)
-    encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: meshBuffers.vertexCount)
+
+    for chunkIndex in world.allChunkIndices() {
+      guard let meshBuffers = chunkMeshBuffers[chunkIndex], meshBuffers.vertexCount > 0 else {
+        continue
+      }
+
+      encoder.setVertexBuffer(meshBuffers.vertexBuffer, offset: 0, index: 0)
+      encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: meshBuffers.vertexCount)
+    }
+
+    if let selectionBuffer {
+      encoder.setRenderPipelineState(highlightPipelineState)
+      encoder.setVertexBuffer(selectionBuffer, offset: 0, index: 0)
+      encoder.setVertexBuffer(uniformsBuffer, offset: 0, index: 1)
+      encoder.drawPrimitives(
+        type: .line, vertexStart: 0,
+        vertexCount: selectionBuffer.length / MemoryLayout<SIMD3<Float>>.stride)
+    }
+
     encoder.endEncoding()
 
     commandBuffer.present(drawable)
     commandBuffer.commit()
   }
 
+  private func rebuildAllChunks(for world: VoxelWorld) throws {
+    chunkMeshBuffers.removeAll(keepingCapacity: true)
+    synchronizedChunkRevisions.removeAll(keepingCapacity: true)
+
+    for chunkIndex in world.allChunkIndices() {
+      let mesh = world.makeWorldMesh(for: chunkIndex)
+      chunkMeshBuffers[chunkIndex] = try MeshBuffers(device: device, mesh: mesh)
+      synchronizedChunkRevisions[chunkIndex] = world.chunkRevision(for: chunkIndex)
+    }
+  }
+
   private func synchronizeWorldMeshIfNeeded(with world: VoxelWorld) throws {
-    guard synchronizedMeshRevision != world.meshRevision else {
+    for chunkIndex in world.allChunkIndices() {
+      let latestRevision = world.chunkRevision(for: chunkIndex)
+      guard synchronizedChunkRevisions[chunkIndex] != latestRevision else {
+        continue
+      }
+
+      chunkMeshBuffers[chunkIndex] = try MeshBuffers(
+        device: device, mesh: world.makeWorldMesh(for: chunkIndex))
+      synchronizedChunkRevisions[chunkIndex] = latestRevision
+    }
+  }
+
+  private func synchronizeSelectionBuffer(for selectedCell: VoxelIndex?) throws {
+    guard self.selectedCell != selectedCell else {
       return
     }
 
-    meshBuffers = try MeshBuffers(device: device, mesh: world.makeWorldMesh())
-    synchronizedMeshRevision = world.meshRevision
+    self.selectedCell = selectedCell
+
+    guard let selectedCell else {
+      selectionBuffer = nil
+      return
+    }
+
+    let vertices = SelectionHighlightMesh(cell: selectedCell).vertices
+    guard
+      let buffer = device.makeBuffer(
+        bytes: vertices,
+        length: MemoryLayout<SIMD3<Float>>.stride * vertices.count,
+        options: .storageModeShared)
+    else {
+      throw RendererSetupError.highlightBufferUnavailable
+    }
+
+    selectionBuffer = buffer
   }
 }

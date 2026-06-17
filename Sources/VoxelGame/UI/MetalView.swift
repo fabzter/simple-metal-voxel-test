@@ -161,6 +161,10 @@ final class MetalView: NSView {
 
     private func advanceFrame(dt: Float) {
         autoreleasepool {
+            if inputController.consumeMaterialDebugToggle() {
+                renderer.materialDebugMode = renderer.materialDebugMode.next()
+            }
+
             let lookDelta = inputController.consumeLookDelta()
             let editActions = inputController.consumeEditActions()
             scene.update(
@@ -168,7 +172,11 @@ final class MetalView: NSView {
                 editActions: editActions)
 
             do {
-                try renderer.render(into: metalLayer, world: scene.world, camera: scene.camera)
+                try renderer.render(
+                    into: metalLayer,
+                    world: scene.world,
+                    camera: scene.camera,
+                    selectedCell: scene.currentTarget?.solidCell)
                 updateOverlayViews()
             } catch {
                 presentRuntimeErrorOnce(error)
@@ -179,6 +187,7 @@ final class MetalView: NSView {
     private func updateOverlayViews() {
         debugHUDView.update(snapshot: DebugHUDSnapshot(scene: scene, renderer: renderer))
         minimapView.update(snapshot: MinimapSnapshot(scene: scene))
+        crosshairView.update(hasTarget: scene.currentTarget != nil)
     }
 
     private func presentRuntimeErrorOnce(_ error: Error) {

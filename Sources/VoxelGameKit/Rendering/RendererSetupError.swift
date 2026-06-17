@@ -7,6 +7,7 @@ public enum RendererSetupError: LocalizedError {
     case uniformsBufferUnavailable
     case meshBufferUnavailable
     case materialAtlasUnavailable
+    case highlightBufferUnavailable
     case shaderLibraryUnavailable(Error)
     case pipelineStateUnavailable(Error)
     case depthStateUnavailable
@@ -21,6 +22,8 @@ public enum RendererSetupError: LocalizedError {
             return "Failed to allocate the world mesh buffer."
         case .materialAtlasUnavailable:
             return "Failed to create the in-memory material atlas texture."
+        case .highlightBufferUnavailable:
+            return "Failed to allocate the selection highlight buffer."
         case .shaderLibraryUnavailable(let error):
             return "Failed to load the Metal shader library: \(error.localizedDescription)"
         case .pipelineStateUnavailable(let error):

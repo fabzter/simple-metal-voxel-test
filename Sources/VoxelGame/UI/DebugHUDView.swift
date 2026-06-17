@@ -51,18 +51,20 @@ final class DebugHUDView: NSVisualEffectView {
             Space          Jump
             Left click     Remove block
             Right click    Place block
+            M              Toggle material debug
             Esc            Quit
 
             Camera
             Position: x=\(format(snapshot.cameraPosition.x)) y=\(format(snapshot.cameraPosition.y)) z=\(format(snapshot.cameraPosition.z))
             Yaw:      \(format(snapshot.yawDegrees))°
             Pitch:    \(format(snapshot.pitchDegrees))°
+            Target:   \(snapshot.targetCellDescription)
 
             World
             \(seedLine)
             Mesh revision: \(snapshot.meshRevision)
             Vertices:      \(snapshot.vertexCount)
-            Materials:     \(snapshot.currentMaterialMode)
+            Materials:     \(snapshot.materialDebugMode)
             """
     }
 

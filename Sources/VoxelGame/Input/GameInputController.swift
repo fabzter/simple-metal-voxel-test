@@ -7,6 +7,7 @@ final class GameInputController {
     private var playerInput = PlayerInput()
     private var pendingLookDelta = SIMD2<Float>(repeating: 0)
     private var pendingEditActions: [BlockEditAction] = []
+    private var pendingMaterialDebugToggle = false
 
     var currentInput: PlayerInput {
         playerInput
@@ -15,6 +16,9 @@ final class GameInputController {
     func handle(_ event: NSEvent) {
         switch event.type {
         case .keyDown:
+            if event.charactersIgnoringModifiers?.lowercased() == "m" {
+                pendingMaterialDebugToggle = true
+            }
             setKeyState(for: event.keyCode, isPressed: true)
         case .keyUp:
             setKeyState(for: event.keyCode, isPressed: false)
@@ -37,6 +41,11 @@ final class GameInputController {
     func consumeEditActions() -> [BlockEditAction] {
         defer { pendingEditActions.removeAll(keepingCapacity: true) }
         return pendingEditActions
+    }
+
+    func consumeMaterialDebugToggle() -> Bool {
+        defer { pendingMaterialDebugToggle = false }
+        return pendingMaterialDebugToggle
     }
 
     private func setKeyState(for keyCode: UInt16, isPressed: Bool) {

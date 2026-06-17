@@ -4,11 +4,17 @@ import simd
 //
 // We step forward from the camera in small increments, convert each sample point into the voxel
 // cell that contains it, and stop when we hit a solid block.
+//
+// `startDistance` deliberately begins the ray a little in front of the camera. Without that,
+// the camera can end up "hitting" the voxel cell it is already standing inside, which feels like
+// clicks do nothing because the edited block is not the one under the crosshair.
 struct VoxelRaycaster {
+    let startDistance: Float
     let maxDistance: Float
     let stepSize: Float
 
-    init(maxDistance: Float = 8.0, stepSize: Float = 0.05) {
+    init(startDistance: Float = 0.75, maxDistance: Float = 8.0, stepSize: Float = 0.05) {
+        self.startDistance = startDistance
         self.maxDistance = maxDistance
         self.stepSize = stepSize
     }
@@ -17,7 +23,7 @@ struct VoxelRaycaster {
         var previousEmptyCell: VoxelIndex?
         var lastVisitedCell: VoxelIndex?
 
-        var distance: Float = 0.0
+        var distance = startDistance
         while distance <= maxDistance {
             let samplePoint = camera.position + camera.forward * distance
             let currentCell = VoxelIndex(point: samplePoint)
@@ -40,17 +46,17 @@ struct VoxelRaycaster {
     }
 }
 
-struct VoxelRaycastHit {
-    let solidCell: VoxelIndex
-    let placementCell: VoxelIndex?
+public struct VoxelRaycastHit {
+    public let solidCell: VoxelIndex
+    public let placementCell: VoxelIndex?
 }
 
-struct VoxelIndex: Equatable {
-    let x: Int
-    let y: Int
-    let z: Int
+public struct VoxelIndex: Equatable, Sendable {
+    public let x: Int
+    public let y: Int
+    public let z: Int
 
-    init(x: Int, y: Int, z: Int) {
+    public init(x: Int, y: Int, z: Int) {
         self.x = x
         self.y = y
         self.z = z

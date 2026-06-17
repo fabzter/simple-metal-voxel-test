@@ -20,6 +20,8 @@ struct VertexOut {
 struct Uniforms {
     float4x4 projection;
     float4x4 view;
+    float materialDebugMode;
+    float3 padding;
 };
 
 vertex VertexOut vertex_main(VertexIn in [[stage_in]],
@@ -37,17 +39,44 @@ vertex VertexOut vertex_main(VertexIn in [[stage_in]],
 }
 
 fragment float4 fragment_main(VertexOut in [[stage_in]],
+                              constant Uniforms& uniforms [[buffer(1)]],
                               texture2d<half> materialAtlas [[texture(0)]]) {
     constexpr sampler atlasSampler(address::clamp_to_edge, min_filter::nearest, mag_filter::nearest);
+
+    float effectiveMaterialMode = in.materialMode;
+    if (uniforms.materialDebugMode > 1.5) {
+        effectiveMaterialMode = 1.0;
+    } else if (uniforms.materialDebugMode > 0.5) {
+        effectiveMaterialMode = 0.0;
+    }
 
     float3 baseColor = in.color;
 
     // Textured faces pay for the texture sample. Flat-color faces skip that fetch entirely,
     // which keeps the branch the user asked for when a simpler material is enough.
-    if (in.materialMode > 0.5) {
+    if (effectiveMaterialMode > 0.5) {
         half4 sampleColor = materialAtlas.sample(atlasSampler, in.uv);
         baseColor *= float3(sampleColor.rgb);
     }
 
     return float4(baseColor * in.lightAmount, 1.0);
+}
+
+struct HighlightVertexOut {
+    float4 position [[position]];
+};
+
+struct HighlightVertexIn {
+    float3 position [[attribute(0)]];
+};
+
+vertex HighlightVertexOut vertex_highlight(HighlightVertexIn in [[stage_in]],
+                                           constant Uniforms& uniforms [[buffer(1)]]) {
+    HighlightVertexOut out;
+    out.position = uniforms.projection * uniforms.view * float4(in.position, 1.0);
+    return out;
+}
+
+fragment float4 fragment_highlight() {
+    return float4(1.0, 0.9, 0.2, 1.0);
 }

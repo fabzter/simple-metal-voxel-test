@@ -5,16 +5,24 @@ struct MeshBuffers {
     let vertexCount: Int
 
     init(device: MTLDevice, mesh: WorldMesh) throws {
-        guard
-            let vertexBuffer = device.makeBuffer(
+        let vertexCount = mesh.vertexCount
+        let bufferLength = max(MemoryLayout<Vertex>.stride * max(vertexCount, 1), 1)
+
+        let vertexBuffer: MTLBuffer?
+        if vertexCount > 0 {
+            vertexBuffer = device.makeBuffer(
                 bytes: mesh.vertices,
-                length: MemoryLayout<Vertex>.stride * mesh.vertexCount,
+                length: bufferLength,
                 options: .storageModeShared)
-        else {
+        } else {
+            vertexBuffer = device.makeBuffer(length: bufferLength, options: .storageModeShared)
+        }
+
+        guard let vertexBuffer else {
             throw RendererSetupError.meshBufferUnavailable
         }
 
         self.vertexBuffer = vertexBuffer
-        self.vertexCount = mesh.vertexCount
+        self.vertexCount = vertexCount
     }
 }

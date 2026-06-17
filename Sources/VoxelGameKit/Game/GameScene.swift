@@ -5,6 +5,7 @@ import simd
 // It owns the persistent simulation state that changes frame-to-frame:
 // - the voxel world the player collides with and edits
 // - the player/controller state
+// - the currently targeted block under the crosshair
 //
 // The renderer reads data from the scene, but the scene itself is independent of Metal.
 // That separation keeps game logic testable without needing a GPU.
@@ -13,6 +14,8 @@ public final class GameScene {
     public let player: PlayerController
 
     private let raycaster = VoxelRaycaster()
+
+    public private(set) var currentTarget: VoxelRaycastHit?
 
     public var camera: CameraState {
         player.camera
@@ -25,6 +28,7 @@ public final class GameScene {
     ) {
         self.world = VoxelWorld(gridSize: gridSize, generation: worldGeneration)
         self.player = player
+        self.currentTarget = raycaster.raycast(camera: player.camera, in: world)
     }
 
     // Advance one frame of game simulation.
@@ -40,14 +44,17 @@ public final class GameScene {
     ) {
         player.rotateCamera(deltaX: lookDelta.x, deltaY: lookDelta.y)
         player.update(dt: dt, input: input, in: world)
+        currentTarget = raycaster.raycast(camera: camera, in: world)
 
         for editAction in editActions {
             apply(editAction)
         }
+
+        currentTarget = raycaster.raycast(camera: camera, in: world)
     }
 
     private func apply(_ editAction: BlockEditAction) {
-        guard let hit = raycaster.raycast(camera: camera, in: world) else {
+        guard let hit = currentTarget else {
             return
         }
 

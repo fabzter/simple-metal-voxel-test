@@ -9,7 +9,8 @@ struct DebugHUDSnapshot {
     let meshRevision: UInt64
     let vertexCount: Int
     let worldSeed: UInt64?
-    let currentMaterialMode: String
+    let materialDebugMode: String
+    let targetCellDescription: String
 
     init(scene: GameScene, renderer: Renderer) {
         cameraPosition = scene.camera.position
@@ -17,7 +18,13 @@ struct DebugHUDSnapshot {
         pitchDegrees = scene.player.cameraPitch * 180.0 / .pi
         meshRevision = scene.world.meshRevision
         vertexCount = renderer.currentVertexCount
-        currentMaterialMode = "Textured + flat-color"
+        materialDebugMode = renderer.materialDebugMode.displayName
+
+        if let target = scene.currentTarget?.solidCell {
+            targetCellDescription = "(\(target.x), \(target.y), \(target.z))"
+        } else {
+            targetCellDescription = "none"
+        }
 
         switch scene.world.generation {
         case .terrain(let configuration):

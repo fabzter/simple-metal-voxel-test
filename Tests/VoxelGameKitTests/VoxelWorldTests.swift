@@ -52,4 +52,16 @@ struct VoxelWorldTests {
         world.setSolid(false, x: 1, y: 1, z: 1)
         #expect(world.meshRevision == 2)
     }
+
+    @Test
+    func chunkBoundaryEditInvalidatesAdjacentChunks() {
+        let world = VoxelWorld(gridSize: 32, chunkSize: 16, generation: .empty)
+        let leftChunk = VoxelChunkIndex(x: 0, y: 0, z: 0)
+        let rightChunk = VoxelChunkIndex(x: 1, y: 0, z: 0)
+
+        world.setSolid(true, x: 15, y: 4, z: 4)
+
+        #expect(world.chunkRevision(for: leftChunk) == 1)
+        #expect(world.chunkRevision(for: rightChunk) == 1)
+    }
 }

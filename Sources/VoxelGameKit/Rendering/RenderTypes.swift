@@ -18,6 +18,8 @@ struct Vertex {
 struct Uniforms {
     let projection: float4x4
     let view: float4x4
+    let materialDebugMode: Float
+    let padding: SIMD3<Float>
 }
 
 enum MaterialMode: Float {
