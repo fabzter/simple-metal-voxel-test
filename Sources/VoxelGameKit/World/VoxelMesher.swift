@@ -14,25 +14,36 @@ struct VoxelMesher {
             for y in 0..<world.gridSize {
                 for z in 0..<world.gridSize where world.isSolid(x: x, y: y, z: z) {
                     let position = SIMD3<Float>(Float(x), Float(y), Float(z))
-                    let color = color(for: y)
 
                     if !world.isSolid(x: x, y: y + 1, z: z) {
-                        appendFace(to: &meshVertices, offset: position, faceIndex: 2, color: color)
+                        appendFace(
+                            to: &meshVertices, offset: position, faceIndex: 2,
+                            material: material(for: y, faceIndex: 2))
                     }
                     if !world.isSolid(x: x, y: y - 1, z: z) {
-                        appendFace(to: &meshVertices, offset: position, faceIndex: 3, color: color)
+                        appendFace(
+                            to: &meshVertices, offset: position, faceIndex: 3,
+                            material: material(for: y, faceIndex: 3))
                     }
                     if !world.isSolid(x: x, y: y, z: z + 1) {
-                        appendFace(to: &meshVertices, offset: position, faceIndex: 0, color: color)
+                        appendFace(
+                            to: &meshVertices, offset: position, faceIndex: 0,
+                            material: material(for: y, faceIndex: 0))
                     }
                     if !world.isSolid(x: x, y: y, z: z - 1) {
-                        appendFace(to: &meshVertices, offset: position, faceIndex: 1, color: color)
+                        appendFace(
+                            to: &meshVertices, offset: position, faceIndex: 1,
+                            material: material(for: y, faceIndex: 1))
                     }
                     if !world.isSolid(x: x + 1, y: y, z: z) {
-                        appendFace(to: &meshVertices, offset: position, faceIndex: 4, color: color)
+                        appendFace(
+                            to: &meshVertices, offset: position, faceIndex: 4,
+                            material: material(for: y, faceIndex: 4))
                     }
                     if !world.isSolid(x: x - 1, y: y, z: z) {
-                        appendFace(to: &meshVertices, offset: position, faceIndex: 5, color: color)
+                        appendFace(
+                            to: &meshVertices, offset: position, faceIndex: 5,
+                            material: material(for: y, faceIndex: 5))
                     }
                 }
             }
@@ -41,24 +52,38 @@ struct VoxelMesher {
         return WorldMesh(vertices: meshVertices)
     }
 
-    // A tiny height-based palette so terrain layers are easier to read.
-    private func color(for y: Int) -> SIMD3<Float> {
-        if y > 15 {
-            return SIMD3<Float>(0.2, 0.8, 0.2)
+    private func material(for y: Int, faceIndex: Int) -> FaceMaterial {
+        let isTop = faceIndex == 2
+        let isBottom = faceIndex == 3
+
+        if isTop && y >= 22 {
+            return .flat(color: SIMD3<Float>(0.92, 0.92, 0.98))
         }
 
-        if y > 12 {
-            return SIMD3<Float>(0.5, 0.3, 0.1)
+        if isTop && y >= 14 {
+            return .textured(tile: .grass, tint: SIMD3<Float>(1.0, 1.0, 1.0))
         }
 
-        return SIMD3<Float>(0.5, 0.5, 0.5)
+        if isBottom {
+            return .flat(color: SIMD3<Float>(0.22, 0.20, 0.18))
+        }
+
+        if y >= 14 {
+            return .textured(tile: .dirt, tint: SIMD3<Float>(1.0, 1.0, 1.0))
+        }
+
+        if y >= 10 {
+            return .textured(tile: .moss, tint: SIMD3<Float>(0.95, 0.95, 0.95))
+        }
+
+        return .flat(color: SIMD3<Float>(0.50, 0.50, 0.55))
     }
 
     private func appendFace(
         to meshVertices: inout [Vertex],
         offset: SIMD3<Float>,
         faceIndex: Int,
-        color: SIMD3<Float>
+        material: FaceMaterial
     ) {
         // Each entry is one quad centered on the voxel origin.
         // The mesher later turns that quad into two triangles.
@@ -113,6 +138,7 @@ struct VoxelMesher {
 
         let quad = faces[faceIndex]
         let normal = normals[faceIndex]
+        let uvQuad = material.uvQuad
 
         let v0 = offset + quad[0]
         let v1 = offset + quad[1]
@@ -120,11 +146,44 @@ struct VoxelMesher {
         let v3 = offset + quad[3]
 
         // Two triangles per quad.
-        meshVertices.append(Vertex(position: v0, normal: normal, color: color))
-        meshVertices.append(Vertex(position: v1, normal: normal, color: color))
-        meshVertices.append(Vertex(position: v2, normal: normal, color: color))
-        meshVertices.append(Vertex(position: v0, normal: normal, color: color))
-        meshVertices.append(Vertex(position: v2, normal: normal, color: color))
-        meshVertices.append(Vertex(position: v3, normal: normal, color: color))
+        meshVertices.append(material.vertex(position: v0, normal: normal, uv: uvQuad[0]))
+        meshVertices.append(material.vertex(position: v1, normal: normal, uv: uvQuad[1]))
+        meshVertices.append(material.vertex(position: v2, normal: normal, uv: uvQuad[2]))
+        meshVertices.append(material.vertex(position: v0, normal: normal, uv: uvQuad[0]))
+        meshVertices.append(material.vertex(position: v2, normal: normal, uv: uvQuad[2]))
+        meshVertices.append(material.vertex(position: v3, normal: normal, uv: uvQuad[3]))
+    }
+}
+
+private enum FaceMaterial {
+    case flat(color: SIMD3<Float>)
+    case textured(tile: MaterialAtlas.Tile, tint: SIMD3<Float>)
+
+    var uvQuad: [SIMD2<Float>] {
+        switch self {
+        case .flat:
+            return Array(repeating: .zero, count: 4)
+        case .textured(let tile, _):
+            return MaterialAtlas.region(for: tile).quadUVs
+        }
+    }
+
+    func vertex(position: SIMD3<Float>, normal: SIMD3<Float>, uv: SIMD2<Float>) -> Vertex {
+        switch self {
+        case .flat(let color):
+            return Vertex(
+                position: position,
+                normal: normal,
+                color: color,
+                uv: uv,
+                materialMode: MaterialMode.flatColor.rawValue)
+        case .textured(_, let tint):
+            return Vertex(
+                position: position,
+                normal: normal,
+                color: tint,
+                uv: uv,
+                materialMode: MaterialMode.textured.rawValue)
+        }
     }
 }

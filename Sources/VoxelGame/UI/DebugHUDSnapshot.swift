@@ -9,6 +9,7 @@ struct DebugHUDSnapshot {
     let meshRevision: UInt64
     let vertexCount: Int
     let worldSeed: UInt64?
+    let currentMaterialMode: String
 
     init(scene: GameScene, renderer: Renderer) {
         cameraPosition = scene.camera.position
@@ -16,6 +17,7 @@ struct DebugHUDSnapshot {
         pitchDegrees = scene.player.cameraPitch * 180.0 / .pi
         meshRevision = scene.world.meshRevision
         vertexCount = renderer.currentVertexCount
+        currentMaterialMode = "Textured + flat-color"
 
         switch scene.world.generation {
         case .terrain(let configuration):

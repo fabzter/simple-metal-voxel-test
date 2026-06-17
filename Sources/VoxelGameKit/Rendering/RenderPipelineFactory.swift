@@ -18,6 +18,15 @@ struct RenderPipelineFactory {
         vertexDescriptor.attributes[2].offset = MemoryLayout<SIMD3<Float>>.stride * 2
         vertexDescriptor.attributes[2].bufferIndex = 0
 
+        vertexDescriptor.attributes[3].format = .float2
+        vertexDescriptor.attributes[3].offset = MemoryLayout<SIMD3<Float>>.stride * 3
+        vertexDescriptor.attributes[3].bufferIndex = 0
+
+        vertexDescriptor.attributes[4].format = .float
+        vertexDescriptor.attributes[4].offset =
+            MemoryLayout<SIMD3<Float>>.stride * 3 + MemoryLayout<SIMD2<Float>>.stride
+        vertexDescriptor.attributes[4].bufferIndex = 0
+
         vertexDescriptor.layouts[0].stride = MemoryLayout<Vertex>.stride
         vertexDescriptor.layouts[0].stepFunction = .perVertex
 

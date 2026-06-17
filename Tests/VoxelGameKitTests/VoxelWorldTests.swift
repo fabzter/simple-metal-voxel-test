@@ -32,6 +32,12 @@ struct VoxelWorldTests {
     }
 
     @Test
+    func generatedTerrainStartsWithCleanMeshRevision() {
+        let world = VoxelWorld(gridSize: 16, generation: .terrain(.default))
+        #expect(world.meshRevision == 0)
+    }
+
+    @Test
     func meshRevisionChangesOnlyForRealVoxelEdits() {
         let world = VoxelWorld(gridSize: 8, generation: .empty)
 

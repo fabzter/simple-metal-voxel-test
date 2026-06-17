@@ -6,6 +6,7 @@ import simd
 final class GameInputController {
     private var playerInput = PlayerInput()
     private var pendingLookDelta = SIMD2<Float>(repeating: 0)
+    private var pendingEditActions: [BlockEditAction] = []
 
     var currentInput: PlayerInput {
         playerInput
@@ -19,6 +20,10 @@ final class GameInputController {
             setKeyState(for: event.keyCode, isPressed: false)
         case .mouseMoved:
             pendingLookDelta += SIMD2(Float(event.deltaX), Float(event.deltaY))
+        case .leftMouseDown:
+            pendingEditActions.append(.remove)
+        case .rightMouseDown:
+            pendingEditActions.append(.place)
         default:
             break
         }
@@ -27,6 +32,11 @@ final class GameInputController {
     func consumeLookDelta() -> SIMD2<Float> {
         defer { pendingLookDelta = .zero }
         return pendingLookDelta
+    }
+
+    func consumeEditActions() -> [BlockEditAction] {
+        defer { pendingEditActions.removeAll(keepingCapacity: true) }
+        return pendingEditActions
     }
 
     private func setKeyState(for keyCode: UInt16, isPressed: Bool) {

@@ -26,13 +26,26 @@ struct VoxelMesherTests {
     }
 
     @Test
-    func topFacesUseGrassColorAtHighElevation() {
+    func topFacesUseTexturedModeAtHighElevation() {
         let world = VoxelWorld(gridSize: 32, generation: .empty)
         world.setSolid(true, x: 3, y: 20, z: 3)
 
         let mesh = VoxelMesher().makeWorldMesh(for: world)
 
-        let topFaceColor = mesh.vertices.first { $0.normal == SIMD3<Float>(0, 1, 0) }?.color
-        #expect(topFaceColor == SIMD3<Float>(0.2, 0.8, 0.2))
+        let topFaceVertex = mesh.vertices.first { $0.normal == SIMD3<Float>(0, 1, 0) }
+        #expect(topFaceVertex?.materialMode == MaterialMode.textured.rawValue)
+    }
+
+    @Test
+    func lowStoneFacesUseFlatColorMode() {
+        let world = VoxelWorld(gridSize: 32, generation: .empty)
+        world.setSolid(true, x: 3, y: 6, z: 3)
+
+        let mesh = VoxelMesher().makeWorldMesh(for: world)
+
+        let anyFlatVertex = mesh.vertices.contains {
+            $0.materialMode == MaterialMode.flatColor.rawValue
+        }
+        #expect(anyFlatVertex)
     }
 }

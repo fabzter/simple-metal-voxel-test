@@ -13,6 +13,7 @@ public final class Renderer {
   private let depthState: MTLDepthStencilState
   private let projectionConfiguration: ProjectionConfiguration
   private let uniformsBuffer: MTLBuffer
+  private let materialAtlas: MaterialAtlas
 
   private var meshBuffers: MeshBuffers
   private var synchronizedMeshRevision: UInt64
@@ -54,9 +55,10 @@ public final class Renderer {
       library: shaderLibrary.library)
     self.depthState = try RenderPipelineFactory.makeDepthState(device: device)
     self.projectionConfiguration = projectionConfiguration
+    self.uniformsBuffer = uniformsBuffer
+    self.materialAtlas = try MaterialAtlas(device: device)
     self.meshBuffers = try MeshBuffers(device: device, mesh: world.makeWorldMesh())
     self.synchronizedMeshRevision = world.meshRevision
-    self.uniformsBuffer = uniformsBuffer
 
     resize(drawableSize: drawableSize)
   }
@@ -128,6 +130,7 @@ public final class Renderer {
     encoder.setDepthStencilState(depthState)
     encoder.setVertexBuffer(meshBuffers.vertexBuffer, offset: 0, index: 0)
     encoder.setVertexBuffer(uniformsBuffer, offset: 0, index: 1)
+    encoder.setFragmentTexture(materialAtlas.texture, index: 0)
     encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: meshBuffers.vertexCount)
     encoder.endEncoding()
 

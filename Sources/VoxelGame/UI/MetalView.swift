@@ -10,6 +10,8 @@ final class MetalView: NSView {
     private let device: MTLDevice
     private let renderer: Renderer
     private let debugHUDView: DebugHUDView
+    private let minimapView: MinimapView
+    private let crosshairView: CrosshairView
 
     private var gameLoop: GameLoop?
     private var hasPresentedRuntimeError = false
@@ -36,6 +38,8 @@ final class MetalView: NSView {
         let drawableSize = makeDrawableSize(for: frame, backingScaleFactor: nil)
         let renderer = try Renderer(device: device, world: scene.world, drawableSize: drawableSize)
         let debugHUDView = DebugHUDView(frame: .zero)
+        let minimapView = MinimapView(frame: .zero)
+        let crosshairView = CrosshairView(frame: .zero)
 
         return MetalView(
             configuredFrame: frame,
@@ -43,7 +47,9 @@ final class MetalView: NSView {
             inputController: inputController,
             device: device,
             renderer: renderer,
-            debugHUDView: debugHUDView)
+            debugHUDView: debugHUDView,
+            minimapView: minimapView,
+            crosshairView: crosshairView)
     }
 
     override init(frame frameRect: NSRect) {
@@ -56,20 +62,24 @@ final class MetalView: NSView {
         inputController: GameInputController,
         device: MTLDevice,
         renderer: Renderer,
-        debugHUDView: DebugHUDView
+        debugHUDView: DebugHUDView,
+        minimapView: MinimapView,
+        crosshairView: CrosshairView
     ) {
         self.scene = scene
         self.inputController = inputController
         self.device = device
         self.renderer = renderer
         self.debugHUDView = debugHUDView
+        self.minimapView = minimapView
+        self.crosshairView = crosshairView
 
         super.init(frame: frameRect)
 
         wantsLayer = true
         configureMetalLayer()
-        configureDebugHUD()
-        updateDebugHUD()
+        configureOverlayViews()
+        updateOverlayViews()
 
         let gameLoop = GameLoop { [weak self] dt in
             self?.advanceFrame(dt: dt)
@@ -120,12 +130,24 @@ final class MetalView: NSView {
         updateDrawableSize()
     }
 
-    private func configureDebugHUD() {
+    private func configureOverlayViews() {
         addSubview(debugHUDView)
+        addSubview(minimapView)
+        addSubview(crosshairView)
 
         NSLayoutConstraint.activate([
             debugHUDView.topAnchor.constraint(equalTo: topAnchor, constant: 12),
             debugHUDView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+
+            minimapView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            minimapView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -12),
+            minimapView.widthAnchor.constraint(equalToConstant: 180),
+            minimapView.heightAnchor.constraint(equalToConstant: 180),
+
+            crosshairView.centerXAnchor.constraint(equalTo: centerXAnchor),
+            crosshairView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            crosshairView.widthAnchor.constraint(equalToConstant: 24),
+            crosshairView.heightAnchor.constraint(equalToConstant: 24),
         ])
     }
 
@@ -140,19 +162,23 @@ final class MetalView: NSView {
     private func advanceFrame(dt: Float) {
         autoreleasepool {
             let lookDelta = inputController.consumeLookDelta()
-            scene.update(dt: dt, input: inputController.currentInput, lookDelta: lookDelta)
+            let editActions = inputController.consumeEditActions()
+            scene.update(
+                dt: dt, input: inputController.currentInput, lookDelta: lookDelta,
+                editActions: editActions)
 
             do {
                 try renderer.render(into: metalLayer, world: scene.world, camera: scene.camera)
-                updateDebugHUD()
+                updateOverlayViews()
             } catch {
                 presentRuntimeErrorOnce(error)
             }
         }
     }
 
-    private func updateDebugHUD() {
+    private func updateOverlayViews() {
         debugHUDView.update(snapshot: DebugHUDSnapshot(scene: scene, renderer: renderer))
+        minimapView.update(snapshot: MinimapSnapshot(scene: scene))
     }
 
     private func presentRuntimeErrorOnce(_ error: Error) {

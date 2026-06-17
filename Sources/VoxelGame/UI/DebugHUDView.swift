@@ -24,7 +24,7 @@ final class DebugHUDView: NSVisualEffectView {
         addSubview(label)
 
         NSLayoutConstraint.activate([
-            widthAnchor.constraint(equalToConstant: 320),
+            widthAnchor.constraint(equalToConstant: 360),
             label.topAnchor.constraint(equalTo: topAnchor, constant: 10),
             label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
             label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
@@ -46,10 +46,12 @@ final class DebugHUDView: NSVisualEffectView {
 
         label.stringValue = """
             Controls
-            W/A/S/D  Move
-            Mouse    Look
-            Space    Jump
-            Esc      Quit
+            W/A/S/D        Move
+            Mouse          Look
+            Space          Jump
+            Left click     Remove block
+            Right click    Place block
+            Esc            Quit
 
             Camera
             Position: x=\(format(snapshot.cameraPosition.x)) y=\(format(snapshot.cameraPosition.y)) z=\(format(snapshot.cameraPosition.z))
@@ -60,6 +62,7 @@ final class DebugHUDView: NSVisualEffectView {
             \(seedLine)
             Mesh revision: \(snapshot.meshRevision)
             Vertices:      \(snapshot.vertexCount)
+            Materials:     \(snapshot.currentMaterialMode)
             """
     }
 

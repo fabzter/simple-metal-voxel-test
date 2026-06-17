@@ -10,4 +10,14 @@ public struct CameraState: Sendable {
         self.yaw = yaw
         self.pitch = pitch
     }
+
+    // The normalized forward direction of the camera in world space.
+    // This is the direction we use both for movement-relative aiming and for editing rays.
+    public var forward: SIMD3<Float> {
+        normalize(
+            SIMD3<Float>(
+                cos(pitch) * sin(yaw),
+                sin(pitch),
+                -cos(pitch) * cos(yaw)))
+    }
 }

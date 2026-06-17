@@ -36,14 +36,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         CGDisplayHideCursor(CGMainDisplayID())
         CGAssociateMouseAndMouseCursorPosition(0)
 
-        NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp, .mouseMoved]) {
-            [weak self] event in
-            if event.type == .keyDown && event.keyCode == 53 {
-                NSApp.terminate(nil)
-            }
+        NSEvent.addLocalMonitorForEvents(
+            matching: [.keyDown, .keyUp, .mouseMoved, .leftMouseDown, .rightMouseDown]) {
+                [weak self] event in
+                if event.type == .keyDown && event.keyCode == 53 {
+                    NSApp.terminate(nil)
+                }
 
-            self?.gameView?.handleEvent(event)
-            return event
-        }
+                self?.gameView?.handleEvent(event)
+                return event
+            }
     }
 }
