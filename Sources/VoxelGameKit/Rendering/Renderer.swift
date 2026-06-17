@@ -1,11 +1,12 @@
 import CoreGraphics
 import Metal
 import QuartzCore
+import simd
 
 // `Renderer` is the Metal-facing half of the demo.
 //
-// It does not own gameplay state. Instead it receives a camera snapshot each frame and draws
-// the current world mesh using Metal pipeline/buffer objects prepared at startup.
+// It does not own gameplay state. Instead it receives a camera snapshot and a selected hit each
+// frame, then draws only the currently visible chunk meshes plus a face highlight for the target.
 public final class Renderer {
   private let device: MTLDevice
   private let commandQueue: MTLCommandQueue
@@ -19,10 +20,11 @@ public final class Renderer {
   private var chunkMeshBuffers: [VoxelChunkIndex: MeshBuffers]
   private var synchronizedChunkRevisions: [VoxelChunkIndex: UInt64]
   private var selectionBuffer: MTLBuffer?
-  private var selectedCell: VoxelIndex?
+  private var selectedHit: VoxelRaycastHit?
   private var depthTexture: MTLTexture?
 
   public var materialDebugMode: MaterialDebugMode = .hybrid
+  public private(set) var currentVisibleChunkCount: Int = 0
 
   public var currentVertexCount: Int {
     chunkMeshBuffers.values.reduce(0) { $0 + $1.vertexCount }
@@ -72,8 +74,6 @@ public final class Renderer {
     resize(drawableSize: drawableSize)
   }
 
-  // The depth texture must always match the drawable size because depth testing happens
-  // pixel-for-pixel alongside the color target.
   public func resize(drawableSize: CGSize) {
     guard drawableSize.width > 0, drawableSize.height > 0 else {
       depthTexture = nil
@@ -91,16 +91,14 @@ public final class Renderer {
     depthTexture = device.makeTexture(descriptor: descriptor)
   }
 
-  // Before drawing, the renderer checks whether the voxel grid changed. If it did, only the
-  // affected chunk meshes are regenerated and re-uploaded.
   public func render(
     into metalLayer: CAMetalLayer,
     world: VoxelWorld,
     camera: CameraState,
-    selectedCell: VoxelIndex?
+    selectedHit: VoxelRaycastHit?
   ) throws {
     try synchronizeWorldMeshIfNeeded(with: world)
-    try synchronizeSelectionBuffer(for: selectedCell)
+    try synchronizeSelectionBuffer(for: selectedHit)
 
     guard let drawable = metalLayer.nextDrawable(),
       let commandBuffer = commandQueue.makeCommandBuffer(),
@@ -114,13 +112,15 @@ public final class Renderer {
       return
     }
 
-    // Update the per-frame camera matrices that the vertex shader reads.
-    var uniforms = CameraUniforms(
+    let cameraUniforms = CameraUniforms(
       camera: camera,
       projectionConfiguration: projectionConfiguration,
-      drawableSize: drawableSize
-    ).rawValue(materialDebugMode: materialDebugMode)
+      drawableSize: drawableSize)
+    var uniforms = cameraUniforms.rawValue(materialDebugMode: materialDebugMode)
     memcpy(uniformsBuffer.contents(), &uniforms, MemoryLayout<Uniforms>.stride)
+
+    let frustumCuller = FrustumCuller(
+      viewProjectionMatrix: simd_mul(cameraUniforms.projection, cameraUniforms.view))
 
     let passDescriptor = MTLRenderPassDescriptor()
     passDescriptor.colorAttachments[0].texture = drawable.texture
@@ -146,26 +146,34 @@ public final class Renderer {
     encoder.setVertexBuffer(uniformsBuffer, offset: 0, index: 1)
     encoder.setFragmentTexture(materialAtlas.texture, index: 0)
 
+    var visibleChunkCount = 0
     for chunkIndex in world.allChunkIndices() {
       guard let meshBuffers = chunkMeshBuffers[chunkIndex], meshBuffers.vertexCount > 0 else {
         continue
       }
 
+      let bounds = ChunkBounds.bounds(for: chunkIndex, chunkSize: world.chunkSize)
+      guard frustumCuller.isVisible(bounds: bounds) else {
+        continue
+      }
+
+      visibleChunkCount += 1
       encoder.setVertexBuffer(meshBuffers.vertexBuffer, offset: 0, index: 0)
       encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: meshBuffers.vertexCount)
     }
+    currentVisibleChunkCount = visibleChunkCount
 
     if let selectionBuffer {
       encoder.setRenderPipelineState(highlightPipelineState)
       encoder.setVertexBuffer(selectionBuffer, offset: 0, index: 0)
       encoder.setVertexBuffer(uniformsBuffer, offset: 0, index: 1)
       encoder.drawPrimitives(
-        type: .line, vertexStart: 0,
+        type: .line,
+        vertexStart: 0,
         vertexCount: selectionBuffer.length / MemoryLayout<SIMD3<Float>>.stride)
     }
 
     encoder.endEncoding()
-
     commandBuffer.present(drawable)
     commandBuffer.commit()
   }
@@ -194,19 +202,22 @@ public final class Renderer {
     }
   }
 
-  private func synchronizeSelectionBuffer(for selectedCell: VoxelIndex?) throws {
-    guard self.selectedCell != selectedCell else {
+  private func synchronizeSelectionBuffer(for selectedHit: VoxelRaycastHit?) throws {
+    let changedSelection =
+      selectedHit?.solidCell != self.selectedHit?.solidCell
+      || selectedHit?.face?.label != self.selectedHit?.face?.label
+    guard changedSelection else {
       return
     }
 
-    self.selectedCell = selectedCell
+    self.selectedHit = selectedHit
 
-    guard let selectedCell else {
+    guard let selectedHit, let face = selectedHit.face else {
       selectionBuffer = nil
       return
     }
 
-    let vertices = SelectionHighlightMesh(cell: selectedCell).vertices
+    let vertices = SelectionHighlightMesh(cell: selectedHit.solidCell, face: face).vertices
     guard
       let buffer = device.makeBuffer(
         bytes: vertices,

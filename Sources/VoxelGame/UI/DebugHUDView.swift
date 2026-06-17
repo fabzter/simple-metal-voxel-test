@@ -24,7 +24,7 @@ final class DebugHUDView: NSVisualEffectView {
         addSubview(label)
 
         NSLayoutConstraint.activate([
-            widthAnchor.constraint(equalToConstant: 360),
+            widthAnchor.constraint(equalToConstant: 380),
             label.topAnchor.constraint(equalTo: topAnchor, constant: 10),
             label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
             label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
@@ -64,7 +64,12 @@ final class DebugHUDView: NSVisualEffectView {
             \(seedLine)
             Mesh revision: \(snapshot.meshRevision)
             Vertices:      \(snapshot.vertexCount)
+            Visible chunks:\(snapshot.visibleChunkCount)
             Materials:     \(snapshot.materialDebugMode)
+
+            Performance
+            Frame time:    \(format(snapshot.frameTimeMilliseconds)) ms
+            FPS:           \(format(snapshot.framesPerSecond))
             """
     }
 

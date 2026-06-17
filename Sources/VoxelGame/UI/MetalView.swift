@@ -176,16 +176,20 @@ final class MetalView: NSView {
                     into: metalLayer,
                     world: scene.world,
                     camera: scene.camera,
-                    selectedCell: scene.currentTarget?.solidCell)
-                updateOverlayViews()
+                    selectedHit: scene.currentTarget)
+                updateOverlayViews(frameTimeSeconds: dt)
             } catch {
                 presentRuntimeErrorOnce(error)
             }
         }
     }
 
-    private func updateOverlayViews() {
-        debugHUDView.update(snapshot: DebugHUDSnapshot(scene: scene, renderer: renderer))
+    private func updateOverlayViews(frameTimeSeconds: Float = 0) {
+        debugHUDView.update(
+            snapshot: DebugHUDSnapshot(
+                scene: scene,
+                renderer: renderer,
+                frameTimeSeconds: frameTimeSeconds))
         minimapView.update(snapshot: MinimapSnapshot(scene: scene))
         crosshairView.update(hasTarget: scene.currentTarget != nil)
     }

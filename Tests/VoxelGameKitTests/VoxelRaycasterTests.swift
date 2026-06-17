@@ -19,5 +19,6 @@ struct VoxelRaycasterTests {
 
         #expect(hit?.solidCell == VoxelIndex(x: 8, y: 2, z: 5))
         #expect(hit?.placementCell == VoxelIndex(x: 8, y: 2, z: 6))
+        #expect(hit?.face?.label == "front")
     }
 }

@@ -62,9 +62,7 @@ public final class GameScene {
         case .remove:
             world.setSolid(false, x: hit.solidCell.x, y: hit.solidCell.y, z: hit.solidCell.z)
         case .place:
-            guard let placementCell = hit.placementCell else {
-                return
-            }
+            let placementCell = hit.placementCell ?? inferredPlacementCell(from: hit)
 
             guard !placementWouldIntersectPlayer(placementCell) else {
                 return
@@ -72,6 +70,18 @@ public final class GameScene {
 
             world.setSolid(true, x: placementCell.x, y: placementCell.y, z: placementCell.z)
         }
+    }
+
+    private func inferredPlacementCell(from hit: VoxelRaycastHit) -> VoxelIndex {
+        guard let face = hit.face else {
+            return hit.solidCell
+        }
+
+        let offset = face.normalIndex
+        return VoxelIndex(
+            x: hit.solidCell.x + offset.x,
+            y: hit.solidCell.y + offset.y,
+            z: hit.solidCell.z + offset.z)
     }
 
     private func placementWouldIntersectPlayer(_ cell: VoxelIndex) -> Bool {
