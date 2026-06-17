@@ -9,6 +9,7 @@ struct DebugHUDSnapshot {
     let meshRevision: UInt64
     let vertexCount: Int
     let visibleChunkCount: Int
+    let lodDistribution: String
     let worldSeed: UInt64?
     let materialDebugMode: String
     let targetCellDescription: String
@@ -22,6 +23,9 @@ struct DebugHUDSnapshot {
         meshRevision = scene.world.meshRevision
         vertexCount = renderer.currentVertexCount
         visibleChunkCount = renderer.currentVisibleChunkCount
+        lodDistribution = renderer.currentLODCounts.keys.sorted().map {
+            "L\($0):\(renderer.currentLODCounts[$0] ?? 0)"
+        }.joined(separator: " ")
         materialDebugMode = renderer.materialDebugMode.displayName
         frameTimeMilliseconds = frameTimeSeconds * 1000.0
         framesPerSecond = frameTimeSeconds > 0.0001 ? 1.0 / frameTimeSeconds : 0

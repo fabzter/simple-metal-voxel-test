@@ -1,4 +1,5 @@
 import Cocoa
+import CoreGraphics
 import Metal
 import QuartzCore
 import VoxelGameKit
@@ -12,9 +13,14 @@ final class MetalView: NSView {
     private let debugHUDView: DebugHUDView
     private let minimapView: MinimapView
     private let crosshairView: CrosshairView
+    private let debugControlPanelView: DebugControlPanelView
 
     private var gameLoop: GameLoop?
     private var hasPresentedRuntimeError = false
+    private var isDebugPanelModeEnabled = false
+    private var isHUDVisible = true
+    private var isMinimapVisible = true
+    private var isCrosshairVisible = true
 
     private var metalLayer: CAMetalLayer {
         guard let layer = layer as? CAMetalLayer else {
@@ -23,8 +29,6 @@ final class MetalView: NSView {
         return layer
     }
 
-    // Factory entry point used by app startup and tests.
-    // `deviceProvider` is injectable so tests can exercise the “no Metal available” path.
     static func make(
         frame: NSRect,
         deviceProvider: () -> MTLDevice? = MTLCreateSystemDefaultDevice
@@ -33,13 +37,14 @@ final class MetalView: NSView {
             throw MetalViewError.metalUnavailable
         }
 
-        let scene = GameScene()
+        let scene = GameScene(gridSize: 256)
         let inputController = GameInputController()
         let drawableSize = makeDrawableSize(for: frame, backingScaleFactor: nil)
         let renderer = try Renderer(device: device, world: scene.world, drawableSize: drawableSize)
         let debugHUDView = DebugHUDView(frame: .zero)
         let minimapView = MinimapView(frame: .zero)
         let crosshairView = CrosshairView(frame: .zero)
+        let debugControlPanelView = DebugControlPanelView(frame: .zero)
 
         return MetalView(
             configuredFrame: frame,
@@ -49,7 +54,8 @@ final class MetalView: NSView {
             renderer: renderer,
             debugHUDView: debugHUDView,
             minimapView: minimapView,
-            crosshairView: crosshairView)
+            crosshairView: crosshairView,
+            debugControlPanelView: debugControlPanelView)
     }
 
     override init(frame frameRect: NSRect) {
@@ -64,7 +70,8 @@ final class MetalView: NSView {
         renderer: Renderer,
         debugHUDView: DebugHUDView,
         minimapView: MinimapView,
-        crosshairView: CrosshairView
+        crosshairView: CrosshairView,
+        debugControlPanelView: DebugControlPanelView
     ) {
         self.scene = scene
         self.inputController = inputController
@@ -73,12 +80,14 @@ final class MetalView: NSView {
         self.debugHUDView = debugHUDView
         self.minimapView = minimapView
         self.crosshairView = crosshairView
+        self.debugControlPanelView = debugControlPanelView
 
         super.init(frame: frameRect)
 
         wantsLayer = true
         configureMetalLayer()
         configureOverlayViews()
+        configureDebugControlCallbacks()
         updateOverlayViews()
 
         let gameLoop = GameLoop { [weak self] dt in
@@ -114,13 +123,14 @@ final class MetalView: NSView {
     override func viewWillMove(toWindow newWindow: NSWindow?) {
         if newWindow == nil {
             gameLoop?.stop()
+            setMouseCapture(enabled: false)
         }
 
         super.viewWillMove(toWindow: newWindow)
     }
 
     func handleEvent(_ event: NSEvent) {
-        inputController.handle(event)
+        inputController.handle(event, gameplayInputEnabled: !isDebugPanelModeEnabled)
     }
 
     private func configureMetalLayer() {
@@ -134,6 +144,7 @@ final class MetalView: NSView {
         addSubview(debugHUDView)
         addSubview(minimapView)
         addSubview(crosshairView)
+        addSubview(debugControlPanelView)
 
         NSLayoutConstraint.activate([
             debugHUDView.topAnchor.constraint(equalTo: topAnchor, constant: 12),
@@ -148,7 +159,39 @@ final class MetalView: NSView {
             crosshairView.centerYAnchor.constraint(equalTo: centerYAnchor),
             crosshairView.widthAnchor.constraint(equalToConstant: 24),
             crosshairView.heightAnchor.constraint(equalToConstant: 24),
+
+            debugControlPanelView.topAnchor.constraint(equalTo: topAnchor, constant: 12),
+            debugControlPanelView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
         ])
+    }
+
+    private func configureDebugControlCallbacks() {
+        debugControlPanelView.onMaterialModeChanged = { [weak self] mode in
+            self?.renderer.debugSettings.materialMode = mode
+            self?.updateOverlayViews()
+        }
+        debugControlPanelView.onFrustumChanged = { [weak self] value in
+            self?.renderer.debugSettings.frustumCullingEnabled = value
+        }
+        debugControlPanelView.onOcclusionChanged = { [weak self] value in
+            self?.renderer.debugSettings.occlusionCullingEnabled = value
+        }
+        debugControlPanelView.onLODChanged = { [weak self] value in
+            self?.renderer.debugSettings.lodEnabled = value
+            self?.updateOverlayViews()
+        }
+        debugControlPanelView.onHUDChanged = { [weak self] value in
+            self?.isHUDVisible = value
+            self?.debugHUDView.isHidden = !value
+        }
+        debugControlPanelView.onMinimapChanged = { [weak self] value in
+            self?.isMinimapVisible = value
+            self?.minimapView.isHidden = !value
+        }
+        debugControlPanelView.onCrosshairChanged = { [weak self] value in
+            self?.isCrosshairVisible = value
+            self?.crosshairView.isHidden = !value
+        }
     }
 
     private func updateDrawableSize() {
@@ -161,6 +204,15 @@ final class MetalView: NSView {
 
     private func advanceFrame(dt: Float) {
         autoreleasepool {
+            if inputController.consumePanelToggle() {
+                toggleDebugPanelMode()
+            }
+
+            guard !isDebugPanelModeEnabled else {
+                updateOverlayViews(frameTimeSeconds: dt)
+                return
+            }
+
             if inputController.consumeMaterialDebugToggle() {
                 renderer.materialDebugMode = renderer.materialDebugMode.next()
             }
@@ -186,6 +238,10 @@ final class MetalView: NSView {
     }
 
     private func updateOverlayViews(frameTimeSeconds: Float = 0) {
+        debugHUDView.isHidden = !isHUDVisible
+        minimapView.isHidden = !isMinimapVisible
+        crosshairView.isHidden = !isCrosshairVisible
+
         debugHUDView.update(
             snapshot: DebugHUDSnapshot(
                 scene: scene,
@@ -193,6 +249,30 @@ final class MetalView: NSView {
                 frameTimeSeconds: frameTimeSeconds))
         minimapView.update(snapshot: MinimapSnapshot(scene: scene))
         crosshairView.update(hasTarget: scene.currentTarget != nil)
+        debugControlPanelView.update(
+            materialMode: renderer.debugSettings.materialMode,
+            frustumEnabled: renderer.debugSettings.frustumCullingEnabled,
+            occlusionEnabled: renderer.debugSettings.occlusionCullingEnabled,
+            lodEnabled: renderer.debugSettings.lodEnabled,
+            hudVisible: isHUDVisible,
+            minimapVisible: isMinimapVisible,
+            crosshairVisible: isCrosshairVisible)
+    }
+
+    private func toggleDebugPanelMode() {
+        isDebugPanelModeEnabled.toggle()
+        debugControlPanelView.isHidden = !isDebugPanelModeEnabled
+        setMouseCapture(enabled: !isDebugPanelModeEnabled)
+    }
+
+    private func setMouseCapture(enabled: Bool) {
+        if enabled {
+            CGDisplayHideCursor(CGMainDisplayID())
+            CGAssociateMouseAndMouseCursorPosition(0)
+        } else {
+            CGAssociateMouseAndMouseCursorPosition(1)
+            CGDisplayShowCursor(CGMainDisplayID())
+        }
     }
 
     private func presentRuntimeErrorOnce(_ error: Error) {

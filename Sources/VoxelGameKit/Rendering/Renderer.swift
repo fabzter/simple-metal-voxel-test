@@ -14,28 +14,31 @@ public final class Renderer {
   private let highlightPipelineState: MTLRenderPipelineState
   private let depthState: MTLDepthStencilState
   private let projectionConfiguration: ProjectionConfiguration
+  private let lodConfiguration: LODConfiguration
   private let uniformsBuffer: MTLBuffer
   private let materialAtlas: MaterialAtlas
   private let occlusionCuller = ChunkOcclusionCuller()
 
-  private var chunkMeshBuffers: [VoxelChunkIndex: MeshBuffers]
+  private var meshBufferCache: [ChunkLODKey: MeshBuffers]
   private var synchronizedChunkRevisions: [VoxelChunkIndex: UInt64]
   private var selectionBuffer: MTLBuffer?
   private var overlayHit: VoxelRaycastHit?
   private var depthTexture: MTLTexture?
 
-  public var materialDebugMode: MaterialDebugMode = .hybrid
+  public var debugSettings = RenderDebugSettings()
   public private(set) var currentVisibleChunkCount: Int = 0
+  public private(set) var currentLODCounts: [Int: Int] = [:]
 
   public var currentVertexCount: Int {
-    chunkMeshBuffers.values.reduce(0) { $0 + $1.vertexCount }
+    meshBufferCache.values.reduce(0) { $0 + $1.vertexCount }
   }
 
   public init(
     device: MTLDevice,
     world: VoxelWorld,
     drawableSize: CGSize,
-    projectionConfiguration: ProjectionConfiguration = .default
+    projectionConfiguration: ProjectionConfiguration = .default,
+    lodConfiguration: LODConfiguration = .default
   ) throws {
     guard let commandQueue = device.makeCommandQueue() else {
       throw RendererSetupError.commandQueueUnavailable
@@ -66,13 +69,19 @@ public final class Renderer {
       library: shaderLibrary.library)
     self.depthState = try RenderPipelineFactory.makeDepthState(device: device)
     self.projectionConfiguration = projectionConfiguration
+    self.lodConfiguration = lodConfiguration
     self.uniformsBuffer = uniformsBuffer
     self.materialAtlas = try MaterialAtlas(device: device)
-    self.chunkMeshBuffers = [:]
-    self.synchronizedChunkRevisions = [:]
+    self.meshBufferCache = [:]
+    self.synchronizedChunkRevisions = Dictionary(
+      uniqueKeysWithValues: world.allChunkIndices().map { ($0, world.chunkRevision(for: $0)) })
 
-    try rebuildAllChunks(for: world)
     resize(drawableSize: drawableSize)
+  }
+
+  public var materialDebugMode: MaterialDebugMode {
+    get { debugSettings.materialMode }
+    set { debugSettings.materialMode = newValue }
   }
 
   public func resize(drawableSize: CGSize) {
@@ -99,7 +108,7 @@ public final class Renderer {
     selectedHit: VoxelRaycastHit?,
     editFeedback: EditFeedback?
   ) throws {
-    try synchronizeWorldMeshIfNeeded(with: world)
+    synchronizeWorldMeshRevisions(with: world)
     let activeOverlayHit = editFeedback?.hit ?? selectedHit
     try synchronizeSelectionBuffer(for: activeOverlayHit)
 
@@ -121,7 +130,7 @@ public final class Renderer {
       projectionConfiguration: projectionConfiguration,
       drawableSize: drawableSize)
     var uniforms = cameraUniforms.rawValue(
-      materialDebugMode: materialDebugMode,
+      materialDebugMode: debugSettings.materialMode,
       highlightColor: highlightColor)
     memcpy(uniformsBuffer.contents(), &uniforms, MemoryLayout<Uniforms>.stride)
 
@@ -152,25 +161,40 @@ public final class Renderer {
     encoder.setVertexBuffer(uniformsBuffer, offset: 0, index: 1)
     encoder.setFragmentTexture(materialAtlas.texture, index: 0)
 
+    let cameraChunk = world.chunkIndex(
+      containing: VoxelIndex(
+        x: Int(floor(camera.position.x + 0.5)),
+        y: Int(floor(camera.position.y + 0.5)),
+        z: Int(floor(camera.position.z + 0.5))))
+
     var visibleChunkCount = 0
+    var lodCounts: [Int: Int] = [:]
+
     for chunkIndex in world.allChunkIndices() {
-      guard let meshBuffers = chunkMeshBuffers[chunkIndex], meshBuffers.vertexCount > 0 else {
+      guard let lodLevel = selectedLODLevel(for: chunkIndex, cameraChunk: cameraChunk) else {
         continue
       }
 
       let bounds = ChunkBounds.bounds(for: chunkIndex, chunkSize: world.chunkSize)
-      guard frustumCuller.isVisible(bounds: bounds) else {
+      if debugSettings.frustumCullingEnabled && !frustumCuller.isVisible(bounds: bounds) {
         continue
       }
-      guard occlusionCuller.isVisible(chunkIndex: chunkIndex, world: world, camera: camera) else {
+      if debugSettings.occlusionCullingEnabled
+        && !occlusionCuller.isVisible(chunkIndex: chunkIndex, world: world, camera: camera)
+      {
         continue
       }
 
+      let meshBuffers = try meshBuffer(for: chunkIndex, lodLevel: lodLevel, world: world)
+      guard meshBuffers.vertexCount > 0 else { continue }
+
       visibleChunkCount += 1
+      lodCounts[lodLevel, default: 0] += 1
       encoder.setVertexBuffer(meshBuffers.vertexBuffer, offset: 0, index: 0)
       encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: meshBuffers.vertexCount)
     }
     currentVisibleChunkCount = visibleChunkCount
+    currentLODCounts = lodCounts
 
     if let selectionBuffer {
       encoder.setRenderPipelineState(highlightPipelineState)
@@ -187,26 +211,50 @@ public final class Renderer {
     commandBuffer.commit()
   }
 
-  private func rebuildAllChunks(for world: VoxelWorld) throws {
-    chunkMeshBuffers.removeAll(keepingCapacity: true)
-    synchronizedChunkRevisions.removeAll(keepingCapacity: true)
-
-    for chunkIndex in world.allChunkIndices() {
-      let mesh = world.makeWorldMesh(for: chunkIndex)
-      chunkMeshBuffers[chunkIndex] = try MeshBuffers(device: device, mesh: mesh)
-      synchronizedChunkRevisions[chunkIndex] = world.chunkRevision(for: chunkIndex)
+  private func meshBuffer(for chunkIndex: VoxelChunkIndex, lodLevel: Int, world: VoxelWorld) throws
+    -> MeshBuffers
+  {
+    let key = ChunkLODKey(chunkIndex: chunkIndex, lodLevel: lodLevel)
+    if let cached = meshBufferCache[key] {
+      return cached
     }
+
+    let voxelStride = debugSettings.lodEnabled ? lodConfiguration.levels[lodLevel].voxelStride : 1
+    let mesh = world.makeWorldMesh(for: chunkIndex, voxelStride: voxelStride)
+    let buffer = try MeshBuffers(device: device, mesh: mesh)
+    meshBufferCache[key] = buffer
+    return buffer
   }
 
-  private func synchronizeWorldMeshIfNeeded(with world: VoxelWorld) throws {
+  private func selectedLODLevel(for chunkIndex: VoxelChunkIndex, cameraChunk: VoxelChunkIndex?)
+    -> Int?
+  {
+    guard let cameraChunk else { return 0 }
+    let distance = max(
+      abs(chunkIndex.x - cameraChunk.x),
+      abs(chunkIndex.y - cameraChunk.y),
+      abs(chunkIndex.z - cameraChunk.z)
+    )
+
+    if !debugSettings.lodEnabled {
+      return distance <= lodConfiguration.levels.last?.maxChunkDistance ?? 0 ? 0 : nil
+    }
+
+    for (index, level) in lodConfiguration.levels.enumerated()
+    where distance <= level.maxChunkDistance {
+      return index
+    }
+    return nil
+  }
+
+  private func synchronizeWorldMeshRevisions(with world: VoxelWorld) {
     for chunkIndex in world.allChunkIndices() {
       let latestRevision = world.chunkRevision(for: chunkIndex)
       guard synchronizedChunkRevisions[chunkIndex] != latestRevision else {
         continue
       }
 
-      chunkMeshBuffers[chunkIndex] = try MeshBuffers(
-        device: device, mesh: world.makeWorldMesh(for: chunkIndex))
+      meshBufferCache = meshBufferCache.filter { $0.key.chunkIndex != chunkIndex }
       synchronizedChunkRevisions[chunkIndex] = latestRevision
     }
   }

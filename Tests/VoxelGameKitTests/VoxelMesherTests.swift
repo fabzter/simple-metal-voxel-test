@@ -48,4 +48,23 @@ struct VoxelMesherTests {
         }
         #expect(anyFlatVertex)
     }
+
+    @Test
+    func coarserLodProducesLessGeometry() {
+        let world = VoxelWorld(gridSize: 32, chunkSize: 16, generation: .empty)
+
+        for x in 0..<8 {
+            for y in 0..<8 {
+                for z in 0..<8 {
+                    world.setSolid(true, x: x, y: y, z: z)
+                }
+            }
+        }
+
+        let chunk = VoxelChunkIndex(x: 0, y: 0, z: 0)
+        let fullMesh = world.makeWorldMesh(for: chunk, voxelStride: 1)
+        let coarseMesh = world.makeWorldMesh(for: chunk, voxelStride: 2)
+
+        #expect(coarseMesh.vertices.count < fullMesh.vertices.count)
+    }
 }

@@ -37,8 +37,6 @@ public final class VoxelWorld {
         resetChunkRevisions()
     }
 
-    // The world is stored as a dense 3D boolean grid.
-    // `true` means a voxel cube exists at that integer cell.
     public func isSolid(x: Int, y: Int, z: Int) -> Bool {
         if y < 0 {
             return true
@@ -51,9 +49,6 @@ public final class VoxelWorld {
         return solidGrid[index(x: x, y: y, z: z)]
     }
 
-    // Any real change to the voxel grid increments `meshRevision`.
-    // The renderer watches both the world-wide revision and the per-chunk revisions so it can
-    // rebuild only the chunk meshes affected by an edit.
     public func setSolid(_ isSolid: Bool, x: Int, y: Int, z: Int) {
         guard x >= 0, x < gridSize, y >= 0, y < gridSize, z >= 0, z < gridSize else {
             return
@@ -93,13 +88,25 @@ public final class VoxelWorld {
             z: cell.z / chunkSize)
     }
 
-    // Convenience used by tests and older call sites.
     func buildMesh() -> [Vertex] {
-        chunkIndices.flatMap { makeWorldMesh(for: $0).vertices }
+        chunkIndices.flatMap { makeWorldMesh(for: $0, voxelStride: 1).vertices }
     }
 
-    func makeWorldMesh(for chunkIndex: VoxelChunkIndex) -> WorldMesh {
-        mesher.makeWorldMesh(for: self, chunkIndex: chunkIndex)
+    func makeWorldMesh(for chunkIndex: VoxelChunkIndex, voxelStride: Int) -> WorldMesh {
+        mesher.makeWorldMesh(for: self, chunkIndex: chunkIndex, voxelStride: voxelStride)
+    }
+
+    func topSolidY(inColumnX x: Int, z: Int, withinYRange yRange: ClosedRange<Int>) -> Int? {
+        let upper = min(yRange.upperBound, gridSize - 1)
+        let lower = max(yRange.lowerBound, 0)
+        guard lower <= upper else { return nil }
+
+        for y in stride(from: upper, through: lower, by: -1) {
+            if isSolid(x: x, y: y, z: z) {
+                return y
+            }
+        }
+        return nil
     }
 
     private func index(x: Int, y: Int, z: Int) -> Int {

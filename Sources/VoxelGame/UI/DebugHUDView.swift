@@ -65,6 +65,7 @@ final class DebugHUDView: NSVisualEffectView {
             Mesh revision: \(snapshot.meshRevision)
             Vertices:      \(snapshot.vertexCount)
             Visible chunks:\(snapshot.visibleChunkCount)
+            LOD rings:     \(snapshot.lodDistribution.isEmpty ? "none" : snapshot.lodDistribution)
             Materials:     \(snapshot.materialDebugMode)
 
             Performance

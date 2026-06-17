@@ -8,26 +8,40 @@ final class GameInputController {
     private var pendingLookDelta = SIMD2<Float>(repeating: 0)
     private var pendingEditActions: [BlockEditAction] = []
     private var pendingMaterialDebugToggle = false
+    private var pendingPanelToggle = false
 
     var currentInput: PlayerInput {
         playerInput
     }
 
-    func handle(_ event: NSEvent) {
+    func handle(_ event: NSEvent, gameplayInputEnabled: Bool) {
         switch event.type {
         case .keyDown:
-            if event.charactersIgnoringModifiers?.lowercased() == "m" {
-                pendingMaterialDebugToggle = true
+            if event.keyCode == 48 {  // Tab
+                pendingPanelToggle = true
             }
-            setKeyState(for: event.keyCode, isPressed: true)
+            if gameplayInputEnabled {
+                if event.charactersIgnoringModifiers?.lowercased() == "m" {
+                    pendingMaterialDebugToggle = true
+                }
+                setKeyState(for: event.keyCode, isPressed: true)
+            }
         case .keyUp:
-            setKeyState(for: event.keyCode, isPressed: false)
+            if gameplayInputEnabled {
+                setKeyState(for: event.keyCode, isPressed: false)
+            }
         case .mouseMoved:
-            pendingLookDelta += SIMD2(Float(event.deltaX), Float(event.deltaY))
+            if gameplayInputEnabled {
+                pendingLookDelta += SIMD2(Float(event.deltaX), Float(event.deltaY))
+            }
         case .leftMouseDown:
-            pendingEditActions.append(.remove)
+            if gameplayInputEnabled {
+                pendingEditActions.append(.remove)
+            }
         case .rightMouseDown:
-            pendingEditActions.append(.place)
+            if gameplayInputEnabled {
+                pendingEditActions.append(.place)
+            }
         default:
             break
         }
@@ -46,6 +60,11 @@ final class GameInputController {
     func consumeMaterialDebugToggle() -> Bool {
         defer { pendingMaterialDebugToggle = false }
         return pendingMaterialDebugToggle
+    }
+
+    func consumePanelToggle() -> Bool {
+        defer { pendingPanelToggle = false }
+        return pendingPanelToggle
     }
 
     private func setKeyState(for keyCode: UInt16, isPressed: Bool) {
