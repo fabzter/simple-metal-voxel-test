@@ -64,4 +64,12 @@ struct VoxelWorldTests {
         #expect(world.chunkRevision(for: leftChunk) == 1)
         #expect(world.chunkRevision(for: rightChunk) == 1)
     }
+
+    @Test
+    func placedBlocksKeepExplicitMaterialType() {
+        let world = VoxelWorld(gridSize: 32, generation: .empty)
+        world.setSolid(true, x: 4, y: 20, z: 4, material: .stone)
+
+        #expect(world.materialType(x: 4, y: 20, z: 4) == .stone)
+    }
 }

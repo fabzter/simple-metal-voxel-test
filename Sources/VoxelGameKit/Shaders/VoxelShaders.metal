@@ -21,7 +21,8 @@ struct Uniforms {
     float4x4 projection;
     float4x4 view;
     float materialDebugMode;
-    float3 padding;
+    float lodTintOverlayMode;
+    float4 lodTintColor;
     float4 highlightColor;
 };
 
@@ -44,20 +45,25 @@ fragment float4 fragment_main(VertexOut in [[stage_in]],
                               texture2d<half> materialAtlas [[texture(0)]]) {
     constexpr sampler atlasSampler(address::clamp_to_edge, min_filter::nearest, mag_filter::nearest);
 
-    float effectiveMaterialMode = in.materialMode;
+    float3 flatColor = in.color;
+    half4 sampleColor = materialAtlas.sample(atlasSampler, in.uv);
+    float3 texturedColor = in.color * float3(sampleColor.rgb);
+
+    float3 baseColor;
     if (uniforms.materialDebugMode > 1.5) {
-        effectiveMaterialMode = 1.0;
+        // Textures only: use sampled texture color, but keep a slight cool tint so the mode is
+        // subtly and consistently distinguishable from hybrid.
+        baseColor = texturedColor * float3(0.88, 0.94, 1.02);
     } else if (uniforms.materialDebugMode > 0.5) {
-        effectiveMaterialMode = 0.0;
+        // Flat only: skip the texture sample result and give the flat color a small warm lift so
+        // the mode is clearly different without turning into a garish debug view.
+        baseColor = flatColor * float3(1.06, 0.96, 0.90);
+    } else {
+        baseColor = (in.materialMode > 0.5) ? texturedColor : flatColor;
     }
 
-    float3 baseColor = in.color;
-
-    // Textured faces pay for the texture sample. Flat-color faces skip that fetch entirely,
-    // which keeps the branch the user asked for when a simpler material is enough.
-    if (effectiveMaterialMode > 0.5) {
-        half4 sampleColor = materialAtlas.sample(atlasSampler, in.uv);
-        baseColor *= float3(sampleColor.rgb);
+    if (uniforms.lodTintOverlayMode > 0.5) {
+        baseColor = mix(baseColor, uniforms.lodTintColor.rgb, uniforms.lodTintColor.a);
     }
 
     return float4(baseColor * in.lightAmount, 1.0);

@@ -170,6 +170,14 @@ final class MetalView: NSView {
             self?.renderer.debugSettings.materialMode = mode
             self?.updateOverlayViews()
         }
+        debugControlPanelView.onLODOverlayModeChanged = { [weak self] mode in
+            self?.renderer.debugSettings.lodTintOverlayMode = mode
+            self?.updateOverlayViews()
+        }
+        debugControlPanelView.onBlockMaterialChanged = { [weak self] material in
+            self?.scene.selectedPlacementMaterial = material
+            self?.updateOverlayViews()
+        }
         debugControlPanelView.onFrustumChanged = { [weak self] value in
             self?.renderer.debugSettings.frustumCullingEnabled = value
         }
@@ -251,6 +259,8 @@ final class MetalView: NSView {
         crosshairView.update(hasTarget: scene.currentTarget != nil)
         debugControlPanelView.update(
             materialMode: renderer.debugSettings.materialMode,
+            lodTintOverlayMode: renderer.debugSettings.lodTintOverlayMode,
+            blockMaterial: scene.selectedPlacementMaterial,
             frustumEnabled: renderer.debugSettings.frustumCullingEnabled,
             occlusionEnabled: renderer.debugSettings.occlusionCullingEnabled,
             lodEnabled: renderer.debugSettings.lodEnabled,

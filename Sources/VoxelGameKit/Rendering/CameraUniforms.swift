@@ -22,12 +22,18 @@ struct CameraUniforms {
             * float4x4(translation: -camera.position)
     }
 
-    func rawValue(materialDebugMode: MaterialDebugMode, highlightColor: SIMD4<Float>) -> Uniforms {
+    func rawValue(
+        materialDebugMode: MaterialDebugMode,
+        lodTintOverlayMode: LODTintOverlayMode,
+        lodTintColor: SIMD4<Float>,
+        highlightColor: SIMD4<Float>
+    ) -> Uniforms {
         Uniforms(
             projection: projection,
             view: view,
             materialDebugMode: materialDebugMode.rawValue,
-            padding: .zero,
+            lodTintOverlayMode: lodTintOverlayMode == .off ? 0 : 1,
+            lodTintColor: lodTintColor,
             highlightColor: highlightColor)
     }
 }

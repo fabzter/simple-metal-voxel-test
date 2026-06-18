@@ -12,6 +12,8 @@ struct DebugHUDSnapshot {
     let lodDistribution: String
     let worldSeed: UInt64?
     let materialDebugMode: String
+    let lodTintOverlayMode: String
+    let selectedPlacementMaterial: String
     let targetCellDescription: String
     let frameTimeMilliseconds: Float
     let framesPerSecond: Float
@@ -27,6 +29,8 @@ struct DebugHUDSnapshot {
             "L\($0):\(renderer.currentLODCounts[$0] ?? 0)"
         }.joined(separator: " ")
         materialDebugMode = renderer.materialDebugMode.displayName
+        lodTintOverlayMode = renderer.debugSettings.lodTintOverlayMode.displayName
+        selectedPlacementMaterial = scene.selectedPlacementMaterial.displayName
         frameTimeMilliseconds = frameTimeSeconds * 1000.0
         framesPerSecond = frameTimeSeconds > 0.0001 ? 1.0 / frameTimeSeconds : 0
 

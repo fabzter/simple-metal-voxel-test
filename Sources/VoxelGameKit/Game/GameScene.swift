@@ -1,15 +1,5 @@
 import simd
 
-// `GameScene` is the high-level gameplay object for the demo.
-//
-// It owns the persistent simulation state that changes frame-to-frame:
-// - the voxel world the player collides with and edits
-// - the player/controller state
-// - the currently targeted block under the crosshair
-// - the most recent edit feedback pulse
-//
-// The renderer reads data from the scene, but the scene itself is independent of Metal.
-// That separation keeps game logic testable without needing a GPU.
 public final class GameScene {
     public let world: VoxelWorld
     public let player: PlayerController
@@ -18,6 +8,7 @@ public final class GameScene {
 
     public private(set) var currentTarget: VoxelRaycastHit?
     public private(set) var currentEditFeedback: EditFeedback?
+    public var selectedPlacementMaterial: BlockMaterialType = .grass
 
     public var camera: CameraState {
         player.camera
@@ -33,11 +24,6 @@ public final class GameScene {
         self.currentTarget = raycaster.raycast(camera: player.camera, in: world)
     }
 
-    // Advance one frame of game simulation.
-    //
-    // `lookDelta` is the accumulated mouse movement since the last frame.
-    // `input` is the current keyboard/button state snapshot.
-    // `editActions` are one-shot mouse actions such as block placement/removal.
     public func update(
         dt: Float,
         input: PlayerInput,
@@ -73,7 +59,12 @@ public final class GameScene {
                 return
             }
 
-            world.setSolid(true, x: placementCell.x, y: placementCell.y, z: placementCell.z)
+            world.setSolid(
+                true,
+                x: placementCell.x,
+                y: placementCell.y,
+                z: placementCell.z,
+                material: selectedPlacementMaterial)
 
             let placementFace = hit.face?.opposite
             let placementHit = VoxelRaycastHit(

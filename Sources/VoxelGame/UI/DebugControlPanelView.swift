@@ -4,6 +4,8 @@ import VoxelGameKit
 @MainActor
 final class DebugControlPanelView: NSVisualEffectView {
     var onMaterialModeChanged: ((MaterialDebugMode) -> Void)?
+    var onLODOverlayModeChanged: ((LODTintOverlayMode) -> Void)?
+    var onBlockMaterialChanged: ((BlockMaterialType) -> Void)?
     var onFrustumChanged: ((Bool) -> Void)?
     var onOcclusionChanged: ((Bool) -> Void)?
     var onLODChanged: ((Bool) -> Void)?
@@ -12,6 +14,8 @@ final class DebugControlPanelView: NSVisualEffectView {
     var onCrosshairChanged: ((Bool) -> Void)?
 
     private let materialPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+    private let lodTintPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+    private let blockMaterialPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let frustumToggle = NSButton(
         checkboxWithTitle: "Frustum culling", target: nil, action: nil)
     private let occlusionToggle = NSButton(
@@ -42,6 +46,18 @@ final class DebugControlPanelView: NSVisualEffectView {
         materialPopup.target = self
         materialPopup.action = #selector(materialPopupChanged)
 
+        let lodTintLabel = NSTextField(labelWithString: "LOD tint overlay")
+        lodTintLabel.textColor = .white
+        lodTintPopup.addItems(withTitles: [LODTintOverlayMode.off, .subtle].map(\.displayName))
+        lodTintPopup.target = self
+        lodTintPopup.action = #selector(lodTintPopupChanged)
+
+        let blockMaterialLabel = NSTextField(labelWithString: "Placed block type")
+        blockMaterialLabel.textColor = .white
+        blockMaterialPopup.addItems(withTitles: BlockMaterialType.allCases.map(\.displayName))
+        blockMaterialPopup.target = self
+        blockMaterialPopup.action = #selector(blockMaterialPopupChanged)
+
         [frustumToggle, occlusionToggle, lodToggle, hudToggle, minimapToggle, crosshairToggle]
             .forEach {
                 $0.target = self
@@ -52,6 +68,10 @@ final class DebugControlPanelView: NSVisualEffectView {
             title,
             materialLabel,
             materialPopup,
+            lodTintLabel,
+            lodTintPopup,
+            blockMaterialLabel,
+            blockMaterialPopup,
             frustumToggle,
             occlusionToggle,
             lodToggle,
@@ -66,7 +86,7 @@ final class DebugControlPanelView: NSVisualEffectView {
         addSubview(stack)
 
         NSLayoutConstraint.activate([
-            widthAnchor.constraint(equalToConstant: 250),
+            widthAnchor.constraint(equalToConstant: 270),
             stack.topAnchor.constraint(equalTo: topAnchor, constant: 12),
             stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
             stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
@@ -80,6 +100,8 @@ final class DebugControlPanelView: NSVisualEffectView {
 
     func update(
         materialMode: MaterialDebugMode,
+        lodTintOverlayMode: LODTintOverlayMode,
+        blockMaterial: BlockMaterialType,
         frustumEnabled: Bool,
         occlusionEnabled: Bool,
         lodEnabled: Bool,
@@ -88,6 +110,10 @@ final class DebugControlPanelView: NSVisualEffectView {
         crosshairVisible: Bool
     ) {
         materialPopup.selectItem(at: MaterialDebugMode.allCases.firstIndex(of: materialMode) ?? 0)
+        lodTintPopup.selectItem(
+            at: [LODTintOverlayMode.off, .subtle].firstIndex(of: lodTintOverlayMode) ?? 0)
+        blockMaterialPopup.selectItem(
+            at: BlockMaterialType.allCases.firstIndex(of: blockMaterial) ?? 0)
         frustumToggle.state = frustumEnabled ? .on : .off
         occlusionToggle.state = occlusionEnabled ? .on : .off
         lodToggle.state = lodEnabled ? .on : .off
@@ -100,6 +126,19 @@ final class DebugControlPanelView: NSVisualEffectView {
         let index = materialPopup.indexOfSelectedItem
         guard MaterialDebugMode.allCases.indices.contains(index) else { return }
         onMaterialModeChanged?(MaterialDebugMode.allCases[index])
+    }
+
+    @objc private func lodTintPopupChanged() {
+        let modes: [LODTintOverlayMode] = [.off, .subtle]
+        let index = lodTintPopup.indexOfSelectedItem
+        guard modes.indices.contains(index) else { return }
+        onLODOverlayModeChanged?(modes[index])
+    }
+
+    @objc private func blockMaterialPopupChanged() {
+        let index = blockMaterialPopup.indexOfSelectedItem
+        guard BlockMaterialType.allCases.indices.contains(index) else { return }
+        onBlockMaterialChanged?(BlockMaterialType.allCases[index])
     }
 
     @objc private func toggleChanged(_ sender: NSButton) {

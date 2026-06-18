@@ -3,10 +3,6 @@ import Metal
 import QuartzCore
 import simd
 
-// `Renderer` is the Metal-facing half of the demo.
-//
-// It does not own gameplay state. Instead it receives a camera snapshot and a selected hit each
-// frame, then draws only the currently visible chunk meshes plus a face highlight for the target.
 public final class Renderer {
   private let device: MTLDevice
   private let commandQueue: MTLCommandQueue
@@ -129,10 +125,6 @@ public final class Renderer {
       camera: camera,
       projectionConfiguration: projectionConfiguration,
       drawableSize: drawableSize)
-    var uniforms = cameraUniforms.rawValue(
-      materialDebugMode: debugSettings.materialMode,
-      highlightColor: highlightColor)
-    memcpy(uniformsBuffer.contents(), &uniforms, MemoryLayout<Uniforms>.stride)
 
     let frustumCuller = FrustumCuller(
       viewProjectionMatrix: simd_mul(cameraUniforms.projection, cameraUniforms.view))
@@ -158,7 +150,6 @@ public final class Renderer {
 
     encoder.setRenderPipelineState(pipelineState)
     encoder.setDepthStencilState(depthState)
-    encoder.setVertexBuffer(uniformsBuffer, offset: 0, index: 1)
     encoder.setFragmentTexture(materialAtlas.texture, index: 0)
 
     let cameraChunk = world.chunkIndex(
@@ -190,16 +181,34 @@ public final class Renderer {
 
       visibleChunkCount += 1
       lodCounts[lodLevel, default: 0] += 1
+
+      var uniforms = cameraUniforms.rawValue(
+        materialDebugMode: debugSettings.materialMode,
+        lodTintOverlayMode: debugSettings.lodTintOverlayMode,
+        lodTintColor: lodTintColor(for: lodLevel),
+        highlightColor: highlightColor)
+      memcpy(uniformsBuffer.contents(), &uniforms, MemoryLayout<Uniforms>.stride)
+
       encoder.setVertexBuffer(meshBuffers.vertexBuffer, offset: 0, index: 0)
+      encoder.setVertexBuffer(uniformsBuffer, offset: 0, index: 1)
+      encoder.setFragmentBuffer(uniformsBuffer, offset: 0, index: 1)
       encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: meshBuffers.vertexCount)
     }
     currentVisibleChunkCount = visibleChunkCount
     currentLODCounts = lodCounts
 
     if let selectionBuffer {
+      var uniforms = cameraUniforms.rawValue(
+        materialDebugMode: debugSettings.materialMode,
+        lodTintOverlayMode: .off,
+        lodTintColor: SIMD4<Float>(0, 0, 0, 0),
+        highlightColor: highlightColor)
+      memcpy(uniformsBuffer.contents(), &uniforms, MemoryLayout<Uniforms>.stride)
+
       encoder.setRenderPipelineState(highlightPipelineState)
       encoder.setVertexBuffer(selectionBuffer, offset: 0, index: 0)
       encoder.setVertexBuffer(uniformsBuffer, offset: 0, index: 1)
+      encoder.setFragmentBuffer(uniformsBuffer, offset: 0, index: 1)
       encoder.drawPrimitives(
         type: .line,
         vertexStart: 0,
@@ -211,8 +220,8 @@ public final class Renderer {
     commandBuffer.commit()
   }
 
-  private func meshBuffer(for chunkIndex: VoxelChunkIndex, lodLevel: Int, world: VoxelWorld) throws
-    -> MeshBuffers
+  private func meshBuffer(for chunkIndex: VoxelChunkIndex, lodLevel: Int, world: VoxelWorld)
+    throws -> MeshBuffers
   {
     let key = ChunkLODKey(chunkIndex: chunkIndex, lodLevel: lodLevel)
     if let cached = meshBufferCache[key] {
@@ -285,6 +294,21 @@ public final class Renderer {
     }
 
     selectionBuffer = buffer
+  }
+
+  private func lodTintColor(for lodLevel: Int) -> SIMD4<Float> {
+    guard debugSettings.lodTintOverlayMode != .off else {
+      return SIMD4<Float>(0, 0, 0, 0)
+    }
+
+    switch lodLevel {
+    case 0:
+      return SIMD4<Float>(0.15, 0.55, 1.0, 0.12)
+    case 1:
+      return SIMD4<Float>(1.0, 0.78, 0.12, 0.18)
+    default:
+      return SIMD4<Float>(1.0, 0.35, 0.18, 0.24)
+    }
   }
 
   private func makeHighlightColor(editFeedback: EditFeedback?) -> SIMD4<Float> {

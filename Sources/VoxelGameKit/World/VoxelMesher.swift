@@ -1,11 +1,5 @@
 import simd
 
-// `VoxelMesher` translates the abstract voxel grid into triangle data for the GPU.
-//
-// Key idea for beginners:
-// every solid voxel is a cube, but we do NOT draw all 6 faces for all cubes.
-// If one solid cube touches another solid cube, the shared face is hidden inside the world,
-// so we skip it. That is why the mesher checks the 6 neighbors before emitting triangles.
 struct VoxelMesher {
     func makeWorldMesh(for world: VoxelWorld) -> WorldMesh {
         WorldMesh(
@@ -31,13 +25,16 @@ struct VoxelMesher {
 
         let sampleXRange = stride(
             from: max(0, xRange.lowerBound - overlapMargin),
-            to: min(world.gridSize, xRange.upperBound + overlapMargin), by: voxelStride)
+            to: min(world.gridSize, xRange.upperBound + overlapMargin),
+            by: voxelStride)
         let sampleYRange = stride(
             from: max(0, yRange.lowerBound - overlapMargin),
-            to: min(world.gridSize, yRange.upperBound + overlapMargin), by: voxelStride)
+            to: min(world.gridSize, yRange.upperBound + overlapMargin),
+            by: voxelStride)
         let sampleZRange = stride(
             from: max(0, zRange.lowerBound - overlapMargin),
-            to: min(world.gridSize, zRange.upperBound + overlapMargin), by: voxelStride)
+            to: min(world.gridSize, zRange.upperBound + overlapMargin),
+            by: voxelStride)
 
         for x in sampleXRange {
             for y in sampleYRange {
@@ -52,6 +49,7 @@ struct VoxelMesher {
                         Float(x) + centerOffset, Float(y) + centerOffset, Float(z) + centerOffset)
                     let topY =
                         dominantTopY(world: world, x: x, y: y, z: z, voxelStride: voxelStride) ?? y
+                    let blockType = world.materialType(x: x, y: topY, z: z) ?? .stone
 
                     if !cellIsSolid(
                         world: world, x: x, y: y + voxelStride, z: z, voxelStride: voxelStride)
@@ -61,7 +59,7 @@ struct VoxelMesher {
                             offset: position,
                             faceIndex: 2,
                             voxelSize: Float(voxelStride),
-                            material: material(for: topY, faceIndex: 2))
+                            material: material(for: blockType, topY: topY, faceIndex: 2))
                     }
                     if !cellIsSolid(
                         world: world, x: x, y: y - voxelStride, z: z, voxelStride: voxelStride)
@@ -71,7 +69,7 @@ struct VoxelMesher {
                             offset: position,
                             faceIndex: 3,
                             voxelSize: Float(voxelStride),
-                            material: material(for: topY, faceIndex: 3))
+                            material: material(for: blockType, topY: topY, faceIndex: 3))
                     }
                     if !cellIsSolid(
                         world: world, x: x, y: y, z: z + voxelStride, voxelStride: voxelStride)
@@ -81,7 +79,7 @@ struct VoxelMesher {
                             offset: position,
                             faceIndex: 0,
                             voxelSize: Float(voxelStride),
-                            material: material(for: topY, faceIndex: 0))
+                            material: material(for: blockType, topY: topY, faceIndex: 0))
                     }
                     if !cellIsSolid(
                         world: world, x: x, y: y, z: z - voxelStride, voxelStride: voxelStride)
@@ -91,7 +89,7 @@ struct VoxelMesher {
                             offset: position,
                             faceIndex: 1,
                             voxelSize: Float(voxelStride),
-                            material: material(for: topY, faceIndex: 1))
+                            material: material(for: blockType, topY: topY, faceIndex: 1))
                     }
                     if !cellIsSolid(
                         world: world, x: x + voxelStride, y: y, z: z, voxelStride: voxelStride)
@@ -101,7 +99,7 @@ struct VoxelMesher {
                             offset: position,
                             faceIndex: 4,
                             voxelSize: Float(voxelStride),
-                            material: material(for: topY, faceIndex: 4))
+                            material: material(for: blockType, topY: topY, faceIndex: 4))
                     }
                     if !cellIsSolid(
                         world: world, x: x - voxelStride, y: y, z: z, voxelStride: voxelStride)
@@ -111,7 +109,7 @@ struct VoxelMesher {
                             offset: position,
                             faceIndex: 5,
                             voxelSize: Float(voxelStride),
-                            material: material(for: topY, faceIndex: 5))
+                            material: material(for: blockType, topY: topY, faceIndex: 5))
                     }
                 }
             }
@@ -163,31 +161,33 @@ struct VoxelMesher {
         return highest
     }
 
-    private func material(for y: Int, faceIndex: Int) -> FaceMaterial {
+    private func material(for blockType: BlockMaterialType, topY: Int, faceIndex: Int)
+        -> FaceMaterial
+    {
         let isTop = faceIndex == 2
         let isBottom = faceIndex == 3
-
-        if isTop && y >= 22 {
-            return .flat(color: SIMD3<Float>(0.92, 0.92, 0.98), previewTile: .stone)
-        }
-
-        if isTop && y >= 14 {
-            return .textured(tile: .grass, tint: SIMD3<Float>(1.0, 1.0, 1.0))
-        }
 
         if isBottom {
             return .flat(color: SIMD3<Float>(0.22, 0.20, 0.18), previewTile: .dirt)
         }
 
-        if y >= 14 {
+        switch blockType {
+        case .grass:
+            return isTop
+                ? .textured(tile: .grass, tint: SIMD3<Float>(1.0, 1.0, 1.0))
+                : .textured(tile: .dirt, tint: SIMD3<Float>(1.0, 1.0, 1.0))
+        case .dirt:
             return .textured(tile: .dirt, tint: SIMD3<Float>(1.0, 1.0, 1.0))
-        }
-
-        if y >= 10 {
+        case .stone:
+            return .flat(color: SIMD3<Float>(0.50, 0.50, 0.55), previewTile: .stone)
+        case .moss:
             return .textured(tile: .moss, tint: SIMD3<Float>(0.95, 0.95, 0.95))
+        case .snow:
+            if isTop && topY >= 22 {
+                return .flat(color: SIMD3<Float>(0.92, 0.92, 0.98), previewTile: .stone)
+            }
+            return .flat(color: SIMD3<Float>(0.85, 0.86, 0.90), previewTile: .stone)
         }
-
-        return .flat(color: SIMD3<Float>(0.50, 0.50, 0.55), previewTile: .stone)
     }
 
     private func appendFace(
@@ -261,38 +261,5 @@ struct VoxelMesher {
         meshVertices.append(material.vertex(position: v0, normal: normal, uv: uvQuad[0]))
         meshVertices.append(material.vertex(position: v2, normal: normal, uv: uvQuad[2]))
         meshVertices.append(material.vertex(position: v3, normal: normal, uv: uvQuad[3]))
-    }
-}
-
-private enum FaceMaterial {
-    case flat(color: SIMD3<Float>, previewTile: MaterialAtlas.Tile)
-    case textured(tile: MaterialAtlas.Tile, tint: SIMD3<Float>)
-
-    var uvQuad: [SIMD2<Float>] {
-        switch self {
-        case .flat(_, let previewTile):
-            return MaterialAtlas.region(for: previewTile).quadUVs
-        case .textured(let tile, _):
-            return MaterialAtlas.region(for: tile).quadUVs
-        }
-    }
-
-    func vertex(position: SIMD3<Float>, normal: SIMD3<Float>, uv: SIMD2<Float>) -> Vertex {
-        switch self {
-        case .flat(let color, _):
-            return Vertex(
-                position: position,
-                normal: normal,
-                color: color,
-                uv: uv,
-                materialMode: MaterialMode.flatColor.rawValue)
-        case .textured(_, let tint):
-            return Vertex(
-                position: position,
-                normal: normal,
-                color: tint,
-                uv: uv,
-                materialMode: MaterialMode.textured.rawValue)
-        }
     }
 }

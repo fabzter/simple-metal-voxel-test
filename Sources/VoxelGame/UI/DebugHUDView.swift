@@ -67,6 +67,8 @@ final class DebugHUDView: NSVisualEffectView {
             Visible chunks:\(snapshot.visibleChunkCount)
             LOD rings:     \(snapshot.lodDistribution.isEmpty ? "none" : snapshot.lodDistribution)
             Materials:     \(snapshot.materialDebugMode)
+            LOD tint:      \(snapshot.lodTintOverlayMode)
+            Place block:   \(snapshot.selectedPlacementMaterial)
 
             Performance
             Frame time:    \(format(snapshot.frameTimeMilliseconds)) ms

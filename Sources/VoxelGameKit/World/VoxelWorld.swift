@@ -13,6 +13,7 @@ public final class VoxelWorld {
     private let mesher = VoxelMesher()
     private var chunkRevisions: [VoxelChunkIndex: UInt64]
     private let chunkIndices: [VoxelChunkIndex]
+    private var explicitMaterials: [Int: BlockMaterialType] = [:]
 
     public init(
         gridSize: Int = 64,
@@ -50,21 +51,53 @@ public final class VoxelWorld {
     }
 
     public func setSolid(_ isSolid: Bool, x: Int, y: Int, z: Int) {
+        setSolid(isSolid, x: x, y: y, z: z, material: nil)
+    }
+
+    public func setSolid(_ isSolid: Bool, x: Int, y: Int, z: Int, material: BlockMaterialType?) {
         guard x >= 0, x < gridSize, y >= 0, y < gridSize, z >= 0, z < gridSize else {
             return
         }
 
         let cellIndex = index(x: x, y: y, z: z)
-        guard solidGrid[cellIndex] != isSolid else {
+        let existingValue = solidGrid[cellIndex]
+        let existingMaterial = explicitMaterials[cellIndex]
+
+        if existingValue == isSolid {
+            if isSolid, let material, existingMaterial != material {
+                explicitMaterials[cellIndex] = material
+                invalidateMeshAround(x: x, y: y, z: z)
+            }
             return
         }
 
         solidGrid[cellIndex] = isSolid
-        meshRevision &+= 1
-
-        for chunkIndex in affectedChunkIndices(forVoxelX: x, y: y, z: z) {
-            chunkRevisions[chunkIndex, default: 0] &+= 1
+        if isSolid {
+            if let material {
+                explicitMaterials[cellIndex] = material
+            } else {
+                explicitMaterials.removeValue(forKey: cellIndex)
+            }
+        } else {
+            explicitMaterials.removeValue(forKey: cellIndex)
         }
+        invalidateMeshAround(x: x, y: y, z: z)
+    }
+
+    public func materialType(x: Int, y: Int, z: Int) -> BlockMaterialType? {
+        guard isSolid(x: x, y: y, z: z) else {
+            return nil
+        }
+
+        let cellIndex = index(x: x, y: y, z: z)
+        if let explicitMaterial = explicitMaterials[cellIndex] {
+            return explicitMaterial
+        }
+
+        if y >= 22 { return .snow }
+        if y >= 14 { return .grass }
+        if y >= 10 { return .moss }
+        return .stone
     }
 
     public func allChunkIndices() -> [VoxelChunkIndex] {
@@ -111,6 +144,13 @@ public final class VoxelWorld {
 
     private func index(x: Int, y: Int, z: Int) -> Int {
         x + y * gridSize + z * gridSize * gridSize
+    }
+
+    private func invalidateMeshAround(x: Int, y: Int, z: Int) {
+        meshRevision &+= 1
+        for chunkIndex in affectedChunkIndices(forVoxelX: x, y: y, z: z) {
+            chunkRevisions[chunkIndex, default: 0] &+= 1
+        }
     }
 
     private func affectedChunkIndices(forVoxelX x: Int, y: Int, z: Int) -> Set<VoxelChunkIndex> {
