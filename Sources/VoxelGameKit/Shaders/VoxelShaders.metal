@@ -48,6 +48,12 @@ fragment float4 fragment_main(VertexOut in [[stage_in]],
     float3 flatColor = in.color;
     half4 sampleColor = materialAtlas.sample(atlasSampler, in.uv);
     float3 texturedColor = in.color * float3(sampleColor.rgb);
+    float2 tileCenterUV = floor(in.uv * 2.0) * 0.5 + float2(0.25, 0.25);
+    half4 tileCenterSample = materialAtlas.sample(atlasSampler, tileCenterUV);
+    float3 representativeFlatColor =
+        (in.materialMode > 0.5)
+        ? in.color * float3(tileCenterSample.rgb)
+        : flatColor;
 
     float3 baseColor;
     if (uniforms.materialDebugMode > 1.5) {
@@ -55,9 +61,10 @@ fragment float4 fragment_main(VertexOut in [[stage_in]],
         // subtly and consistently distinguishable from hybrid.
         baseColor = texturedColor * float3(0.88, 0.94, 1.02);
     } else if (uniforms.materialDebugMode > 0.5) {
-        // Flat only: skip the texture sample result and give the flat color a small warm lift so
-        // the mode is clearly different without turning into a garish debug view.
-        baseColor = flatColor * float3(1.06, 0.96, 0.90);
+        // Flat only: collapse each material to a single representative color, not to gray. For
+        // textured materials we sample the center of the atlas tile so the whole face becomes one
+        // solid but still material-specific color.
+        baseColor = representativeFlatColor * float3(1.02, 1.00, 0.98);
     } else {
         baseColor = (in.materialMode > 0.5) ? texturedColor : flatColor;
     }

@@ -22,18 +22,15 @@ final class GameInputController {
             if event.keyCode == 48 {  // Tab
                 pendingPanelToggle = true
             }
+            if event.specialKey == .f1 {
+                pendingHUDToggle = true
+            }
             if gameplayInputEnabled {
                 if event.charactersIgnoringModifiers?.lowercased() == "m" {
                     pendingMaterialDebugToggle = true
                 }
-                if event.keyCode == 122 {  // F1
-                    pendingHUDToggle = true
-                }
-                if let digit = event.charactersIgnoringModifiers, digit >= "1" && digit <= "5",
-                    let index = Int(String(digit)),
-                    BlockMaterialType.allCases.indices.contains(index - 1)
-                {
-                    pendingBlockMaterialSelection = BlockMaterialType.allCases[index - 1]
+                if let material = blockMaterialShortcut(in: event) {
+                    pendingBlockMaterialSelection = material
                 }
                 setKeyState(for: event.keyCode, isPressed: true)
             }
@@ -103,5 +100,18 @@ final class GameInputController {
         default:
             break
         }
+    }
+
+    private func blockMaterialShortcut(in event: NSEvent) -> BlockMaterialType? {
+        guard
+            let characters = event.charactersIgnoringModifiers,
+            characters.count == 1,
+            let digit = characters.first?.wholeNumberValue,
+            BlockMaterialType.allCases.indices.contains(digit - 1)
+        else {
+            return nil
+        }
+
+        return BlockMaterialType.allCases[digit - 1]
     }
 }
