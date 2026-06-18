@@ -2,6 +2,8 @@
 
 VoxelGame is a small first-person voxel demo built directly on top of Apple's Metal API with Swift Package Manager. There is no game engine hiding the graphics work: the project opens a native AppKit window, builds chunk meshes from voxel data, and sends them to Metal for rendering so you can study the full path from world data to pixels on screen.
 
+The current build aims for a cleaner play view than a traditional always-on debug overlay: a compact HUD stays out of the center of the screen, transient banners confirm mode changes, and a larger debug inspector can be opened on demand.
+
 ## Build and run
 
 ### Prerequisites
@@ -31,7 +33,7 @@ Or use the helper script:
 | Space | Jump |
 | Left click | Remove block |
 | Right click | Place block |
-| Tab | Toggle debug panel and release/re-capture the mouse |
+| Tab | Toggle the debug inspector and release/re-capture the mouse |
 | M | Toggle material debug mode |
 | F1 | Toggle HUD |
 | 1-5 | Select block type (`1` Grass, `2` Dirt, `3` Stone, `4` Moss, `5` Snow) |

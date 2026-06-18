@@ -7,7 +7,8 @@ final class MinimapView: NSView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
-        layer?.cornerRadius = 10
+        layer?.cornerRadius = 80
+        layer?.masksToBounds = true
         translatesAutoresizingMaskIntoConstraints = false
     }
 
@@ -27,17 +28,21 @@ final class MinimapView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
 
-        NSColor.black.withAlphaComponent(0.55).setFill()
-        bounds.fill()
+        let insetBounds = bounds.insetBy(dx: 2, dy: 2)
+        let clipPath = NSBezierPath(ovalIn: insetBounds)
+        clipPath.addClip()
+
+        NSColor.black.withAlphaComponent(0.45).setFill()
+        clipPath.fill()
 
         guard let snapshot else {
             return
         }
 
-        let cellSize = bounds.width / CGFloat(snapshot.radius * 2 + 1)
+        let cellSize = insetBounds.width / CGFloat(snapshot.radius * 2 + 1)
         for cell in snapshot.cells {
-            let x = CGFloat(cell.dx + snapshot.radius) * cellSize
-            let y = CGFloat(snapshot.radius - cell.dz) * cellSize
+            let x = insetBounds.minX + CGFloat(cell.dx + snapshot.radius) * cellSize
+            let y = insetBounds.minY + CGFloat(snapshot.radius - cell.dz) * cellSize
             let rect = NSRect(x: x, y: y, width: cellSize, height: cellSize)
 
             color(forTopY: cell.topY).setFill()
@@ -45,14 +50,16 @@ final class MinimapView: NSView {
         }
 
         let playerRect = NSRect(
-            x: CGFloat(snapshot.radius) * cellSize + cellSize * 0.25,
-            y: CGFloat(snapshot.radius) * cellSize + cellSize * 0.25,
+            x: insetBounds.minX + CGFloat(snapshot.radius) * cellSize + cellSize * 0.25,
+            y: insetBounds.minY + CGFloat(snapshot.radius) * cellSize + cellSize * 0.25,
             width: cellSize * 0.5,
             height: cellSize * 0.5)
         NSColor.systemRed.setFill()
         NSBezierPath(ovalIn: playerRect).fill()
 
         drawFacingIndicator(cellSize: cellSize, yaw: snapshot.yaw)
+        drawNorthMarker(in: insetBounds)
+        drawBorder(in: insetBounds)
     }
 
     private func color(forTopY topY: Int) -> NSColor {
@@ -92,5 +99,24 @@ final class MinimapView: NSView {
                 y: tip.y - direction.dy * cellSize * 0.7 - wing.dy * cellSize * 0.45))
         NSColor.white.withAlphaComponent(0.9).setStroke()
         path.stroke()
+    }
+
+    private func drawNorthMarker(in rect: NSRect) {
+        let label = "N" as NSString
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 10, weight: .semibold),
+            .foregroundColor: NSColor.white.withAlphaComponent(0.82),
+        ]
+        let size = label.size(withAttributes: attributes)
+        label.draw(
+            at: CGPoint(x: rect.midX - size.width / 2, y: rect.maxY - size.height - 6),
+            withAttributes: attributes)
+    }
+
+    private func drawBorder(in rect: NSRect) {
+        let border = NSBezierPath(ovalIn: rect)
+        border.lineWidth = 2
+        NSColor.white.withAlphaComponent(0.16).setStroke()
+        border.stroke()
     }
 }

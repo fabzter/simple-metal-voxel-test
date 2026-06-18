@@ -14,6 +14,7 @@ final class MetalView: NSView {
     private let minimapView: MinimapView
     private let crosshairView: CrosshairView
     private let debugControlPanelView: DebugControlPanelView
+    private let statusBannerView: StatusBannerView
 
     private var gameLoop: GameLoop?
     private var hasPresentedRuntimeError = false
@@ -46,6 +47,7 @@ final class MetalView: NSView {
         let minimapView = MinimapView(frame: .zero)
         let crosshairView = CrosshairView(frame: .zero)
         let debugControlPanelView = DebugControlPanelView(frame: .zero)
+        let statusBannerView = StatusBannerView(frame: .zero)
 
         return MetalView(
             configuredFrame: frame,
@@ -56,7 +58,8 @@ final class MetalView: NSView {
             debugHUDView: debugHUDView,
             minimapView: minimapView,
             crosshairView: crosshairView,
-            debugControlPanelView: debugControlPanelView)
+            debugControlPanelView: debugControlPanelView,
+            statusBannerView: statusBannerView)
     }
 
     override init(frame frameRect: NSRect) {
@@ -72,7 +75,8 @@ final class MetalView: NSView {
         debugHUDView: DebugHUDView,
         minimapView: MinimapView,
         crosshairView: CrosshairView,
-        debugControlPanelView: DebugControlPanelView
+        debugControlPanelView: DebugControlPanelView,
+        statusBannerView: StatusBannerView
     ) {
         self.scene = scene
         self.inputController = inputController
@@ -82,6 +86,7 @@ final class MetalView: NSView {
         self.minimapView = minimapView
         self.crosshairView = crosshairView
         self.debugControlPanelView = debugControlPanelView
+        self.statusBannerView = statusBannerView
 
         super.init(frame: frameRect)
 
@@ -149,6 +154,7 @@ final class MetalView: NSView {
         addSubview(minimapView)
         addSubview(crosshairView)
         addSubview(debugControlPanelView)
+        addSubview(statusBannerView)
 
         NSLayoutConstraint.activate([
             debugHUDView.topAnchor.constraint(equalTo: topAnchor, constant: 12),
@@ -156,8 +162,8 @@ final class MetalView: NSView {
 
             minimapView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
             minimapView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -12),
-            minimapView.widthAnchor.constraint(equalToConstant: 200),
-            minimapView.heightAnchor.constraint(equalToConstant: 200),
+            minimapView.widthAnchor.constraint(equalToConstant: 160),
+            minimapView.heightAnchor.constraint(equalToConstant: 160),
 
             crosshairView.centerXAnchor.constraint(equalTo: centerXAnchor),
             crosshairView.centerYAnchor.constraint(equalTo: centerYAnchor),
@@ -166,43 +172,55 @@ final class MetalView: NSView {
 
             debugControlPanelView.topAnchor.constraint(equalTo: topAnchor, constant: 12),
             debugControlPanelView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+
+            statusBannerView.topAnchor.constraint(equalTo: topAnchor, constant: 12),
+            statusBannerView.centerXAnchor.constraint(equalTo: centerXAnchor),
         ])
     }
 
     private func configureDebugControlCallbacks() {
         debugControlPanelView.onMaterialModeChanged = { [weak self] mode in
             self?.renderer.debugSettings.materialMode = mode
+            self?.showStatusBanner("Material view: \(mode.displayName)")
             self?.updateOverlayViews()
         }
         debugControlPanelView.onLODOverlayModeChanged = { [weak self] mode in
             self?.renderer.debugSettings.lodTintOverlayMode = mode
+            self?.showStatusBanner("LOD tint: \(mode.displayName)")
             self?.updateOverlayViews()
         }
         debugControlPanelView.onBlockMaterialChanged = { [weak self] material in
             self?.scene.selectedPlacementMaterial = material
+            self?.showStatusBanner("Placed block: \(material.displayName)")
             self?.updateOverlayViews()
         }
         debugControlPanelView.onFrustumChanged = { [weak self] value in
             self?.renderer.debugSettings.frustumCullingEnabled = value
+            self?.showStatusBanner(value ? "Frustum culling on" : "Frustum culling off")
         }
         debugControlPanelView.onOcclusionChanged = { [weak self] value in
             self?.renderer.debugSettings.occlusionCullingEnabled = value
+            self?.showStatusBanner(value ? "Occlusion culling on" : "Occlusion culling off")
         }
         debugControlPanelView.onLODChanged = { [weak self] value in
             self?.renderer.debugSettings.lodEnabled = value
+            self?.showStatusBanner(value ? "LOD meshing on" : "LOD meshing off")
             self?.updateOverlayViews()
         }
         debugControlPanelView.onHUDChanged = { [weak self] value in
             self?.isHUDVisible = value
-            self?.debugHUDView.isHidden = !value
+            self?.showStatusBanner(value ? "Compact HUD shown" : "Compact HUD hidden")
+            self?.updateOverlayViews()
         }
         debugControlPanelView.onMinimapChanged = { [weak self] value in
             self?.isMinimapVisible = value
-            self?.minimapView.isHidden = !value
+            self?.showStatusBanner(value ? "Minimap shown" : "Minimap hidden")
+            self?.updateOverlayViews()
         }
         debugControlPanelView.onCrosshairChanged = { [weak self] value in
             self?.isCrosshairVisible = value
-            self?.crosshairView.isHidden = !value
+            self?.showStatusBanner(value ? "Crosshair shown" : "Crosshair hidden")
+            self?.updateOverlayViews()
         }
     }
 
@@ -222,13 +240,15 @@ final class MetalView: NSView {
 
             if inputController.consumeMaterialDebugToggle() {
                 renderer.materialDebugMode = renderer.materialDebugMode.next()
+                showStatusBanner("Material view: \(renderer.materialDebugMode.displayName)")
             }
             if inputController.consumeHUDToggle() {
                 isHUDVisible.toggle()
-                debugHUDView.isHidden = !isHUDVisible
+                showStatusBanner(isHUDVisible ? "Compact HUD shown" : "Compact HUD hidden")
             }
             if let material = inputController.consumeBlockMaterialSelection() {
                 scene.selectedPlacementMaterial = material
+                showStatusBanner("Placed block: \(material.displayName)")
                 updateOverlayViews()
             }
 
@@ -255,15 +275,16 @@ final class MetalView: NSView {
     }
 
     private func updateOverlayViews(frameTimeSeconds: Float = 0) {
+        let snapshot = DebugHUDSnapshot(
+            scene: scene,
+            renderer: renderer,
+            frameTimeSeconds: frameTimeSeconds)
+
         debugHUDView.isHidden = !isHUDVisible
         minimapView.isHidden = !isMinimapVisible
         crosshairView.isHidden = !isCrosshairVisible
 
-        debugHUDView.update(
-            snapshot: DebugHUDSnapshot(
-                scene: scene,
-                renderer: renderer,
-                frameTimeSeconds: frameTimeSeconds))
+        debugHUDView.update(snapshot: snapshot)
         minimapView.update(snapshot: MinimapSnapshot(scene: scene))
         crosshairView.update(hasTarget: scene.currentTarget != nil)
         debugControlPanelView.update(
@@ -275,7 +296,8 @@ final class MetalView: NSView {
             lodEnabled: renderer.debugSettings.lodEnabled,
             hudVisible: isHUDVisible,
             minimapVisible: isMinimapVisible,
-            crosshairVisible: isCrosshairVisible)
+            crosshairVisible: isCrosshairVisible,
+            snapshot: snapshot)
     }
 
     private func toggleDebugPanelMode() {
@@ -283,6 +305,8 @@ final class MetalView: NSView {
         inputController.cancelGameplayInput()
         debugControlPanelView.isHidden = !isDebugPanelModeEnabled
         setMouseCapture(enabled: !isDebugPanelModeEnabled)
+        showStatusBanner(
+            isDebugPanelModeEnabled ? "Debug inspector opened" : "Debug inspector closed")
     }
 
     private func setMouseCapture(enabled: Bool) {
@@ -310,6 +334,10 @@ final class MetalView: NSView {
         gameLoop?.stop()
         setMouseCapture(enabled: false)
         NSApp.presentError(error)
+    }
+
+    private func showStatusBanner(_ message: String) {
+        statusBannerView.show(message: message)
     }
 
     private static func makeDrawableSize(for frame: NSRect, backingScaleFactor: CGFloat?) -> CGSize

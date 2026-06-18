@@ -1,11 +1,12 @@
 import AppKit
 
-// A small translucent overlay that explains the controls and shows live camera/world data.
-// It is intentionally simple AppKit UI so a beginner can inspect it without learning a full UI
-// framework first.
 @MainActor
 final class DebugHUDView: NSVisualEffectView {
-    private let label = NSTextField(wrappingLabelWithString: "")
+    private let shortcutLabel = NSTextField(labelWithString: "")
+    private let targetLabel = NSTextField(labelWithString: "")
+    private let statusLabel = NSTextField(labelWithString: "")
+    private let perfLabel = NSTextField(labelWithString: "")
+    private let stack = NSStackView()
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -14,21 +15,36 @@ final class DebugHUDView: NSVisualEffectView {
         blendingMode = .withinWindow
         state = .active
         wantsLayer = true
-        layer?.cornerRadius = 10
+        layer?.cornerRadius = 14
+        layer?.borderWidth = 1
+        layer?.borderColor = NSColor.white.withAlphaComponent(0.08).cgColor
         translatesAutoresizingMaskIntoConstraints = false
 
-        label.translatesAutoresizingMaskIntoConstraints = false
-        label.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
-        label.textColor = .white
-        label.maximumNumberOfLines = 0
-        addSubview(label)
+        shortcutLabel.font = .systemFont(ofSize: 11, weight: .medium)
+        shortcutLabel.textColor = NSColor.white.withAlphaComponent(0.82)
+
+        [targetLabel, statusLabel, perfLabel].forEach {
+            $0.font = .monospacedSystemFont(ofSize: 12, weight: .medium)
+            $0.textColor = .white
+            $0.lineBreakMode = .byTruncatingTail
+            $0.maximumNumberOfLines = 1
+        }
+
+        perfLabel.textColor = NSColor.white.withAlphaComponent(0.86)
+
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 4
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        [shortcutLabel, targetLabel, statusLabel, perfLabel].forEach(stack.addArrangedSubview(_:))
+        addSubview(stack)
 
         NSLayoutConstraint.activate([
-            widthAnchor.constraint(equalToConstant: 420),
-            label.topAnchor.constraint(equalTo: topAnchor, constant: 10),
-            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
-            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
-            label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10),
+            widthAnchor.constraint(equalToConstant: 280),
+            stack.topAnchor.constraint(equalTo: topAnchor, constant: 10),
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10),
         ])
     }
 
@@ -37,50 +53,25 @@ final class DebugHUDView: NSVisualEffectView {
     }
 
     func update(snapshot: DebugHUDSnapshot) {
-        let seedLine: String
-        if let worldSeed = snapshot.worldSeed {
-            seedLine = "Seed: \(worldSeed)"
-        } else {
-            seedLine = "Seed: n/a"
-        }
-
-        label.stringValue = """
-            Controls
-            W/A/S/D        Move
-            Mouse          Look
-            Space          Jump
-            Left click     Remove block
-            Right click    Place block
-            Tab            Toggle debug panel
-            M              Toggle material debug
-            F1             Toggle HUD
-            1-5            Select block type
-            1 Grass · 2 Dirt · 3 Stone · 4 Moss · 5 Snow
-            Esc            Quit
-
-            Camera
-            Position: x=\(format(snapshot.cameraPosition.x)) y=\(format(snapshot.cameraPosition.y)) z=\(format(snapshot.cameraPosition.z))
-            Yaw:      \(format(snapshot.yawDegrees))°
-            Pitch:    \(format(snapshot.pitchDegrees))°
-            Target:   \(snapshot.targetCellDescription)
-
-            World
-            \(seedLine)
-            Mesh revision: \(snapshot.meshRevision)
-            Vertices:      \(snapshot.vertexCount)
-            Visible chunks:\(snapshot.visibleChunkCount)
-            LOD rings:     \(snapshot.lodDistribution.isEmpty ? "none" : snapshot.lodDistribution)
-            Materials:     \(snapshot.materialDebugMode)
-            LOD tint:      \(snapshot.lodTintOverlayMode)
-            Place block:   \(snapshot.selectedPlacementMaterial)
-
-            Performance
-            Frame time:    \(format(snapshot.frameTimeMilliseconds)) ms
-            FPS:           \(format(snapshot.framesPerSecond))
-            """
+        shortcutLabel.stringValue = "Tab Debug  ·  F1 HUD  ·  1–5 Block"
+        targetLabel.stringValue = "Target  \(snapshot.targetCellDescription)"
+        let renderMode =
+            snapshot.materialDebugMode == "Textured + flat-color"
+            ? "Standard view"
+            : snapshot.materialDebugMode
+        let tintMode =
+            snapshot.lodTintOverlayMode == "LOD tint off"
+            ? nil
+            : snapshot.lodTintOverlayMode
+        statusLabel.stringValue =
+            ["Place  \(snapshot.selectedPlacementMaterial)", renderMode, tintMode]
+            .compactMap { $0 }
+            .joined(separator: "  ·  ")
+        perfLabel.stringValue =
+            "\(format(snapshot.framesPerSecond)) FPS  ·  \(snapshot.visibleChunkCount) chunks  ·  \(snapshot.lodDistribution.isEmpty ? "LOD none" : snapshot.lodDistribution)"
     }
 
     private func format(_ value: Float) -> String {
-        String(format: "%.2f", value)
+        String(format: "%.0f", value)
     }
 }

@@ -20,10 +20,14 @@ final class DebugControlPanelView: NSVisualEffectView {
         checkboxWithTitle: "Frustum culling", target: nil, action: nil)
     private let occlusionToggle = NSButton(
         checkboxWithTitle: "Occlusion culling", target: nil, action: nil)
-    private let lodToggle = NSButton(checkboxWithTitle: "LOD enabled", target: nil, action: nil)
-    private let hudToggle = NSButton(checkboxWithTitle: "HUD", target: nil, action: nil)
+    private let lodToggle = NSButton(checkboxWithTitle: "LOD meshing", target: nil, action: nil)
+    private let hudToggle = NSButton(checkboxWithTitle: "Compact HUD", target: nil, action: nil)
     private let minimapToggle = NSButton(checkboxWithTitle: "Minimap", target: nil, action: nil)
     private let crosshairToggle = NSButton(checkboxWithTitle: "Crosshair", target: nil, action: nil)
+
+    private let cameraSummaryLabel = DebugPanelSummaryLabel()
+    private let worldSummaryLabel = DebugPanelSummaryLabel()
+    private let performanceSummaryLabel = DebugPanelSummaryLabel()
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -32,28 +36,34 @@ final class DebugControlPanelView: NSVisualEffectView {
         blendingMode = .withinWindow
         state = .active
         wantsLayer = true
-        layer?.cornerRadius = 12
+        layer?.cornerRadius = 16
+        layer?.borderWidth = 1
+        layer?.borderColor = NSColor.white.withAlphaComponent(0.08).cgColor
         translatesAutoresizingMaskIntoConstraints = false
         isHidden = true
 
-        let title = NSTextField(labelWithString: "Debug Panel (Tab to close)")
-        title.font = .boldSystemFont(ofSize: 13)
-        title.textColor = .white
+        let title = makeSectionTitle("Debug Inspector")
+        let subtitle = NSTextField(
+            labelWithString: "Tab closes this panel. The world keeps running while it is open.")
+        subtitle.font = .systemFont(ofSize: 11)
+        subtitle.textColor = NSColor.white.withAlphaComponent(0.72)
 
-        let materialLabel = NSTextField(labelWithString: "Material mode")
-        materialLabel.textColor = .white
+        let controlsStack = NSStackView(views: [
+            makeLabeledControlRow(title: "Material mode", control: materialPopup),
+            makeLabeledControlRow(title: "LOD tint", control: lodTintPopup),
+            makeLabeledControlRow(title: "Placed block", control: blockMaterialPopup),
+        ])
+        controlsStack.orientation = .vertical
+        controlsStack.spacing = 8
+
         materialPopup.addItems(withTitles: MaterialDebugMode.allCases.map(\.displayName))
         materialPopup.target = self
         materialPopup.action = #selector(materialPopupChanged)
 
-        let lodTintLabel = NSTextField(labelWithString: "LOD tint overlay")
-        lodTintLabel.textColor = .white
         lodTintPopup.addItems(withTitles: LODTintOverlayMode.allCases.map(\.displayName))
         lodTintPopup.target = self
         lodTintPopup.action = #selector(lodTintPopupChanged)
 
-        let blockMaterialLabel = NSTextField(labelWithString: "Placed block type")
-        blockMaterialLabel.textColor = .white
         blockMaterialPopup.addItems(withTitles: BlockMaterialType.allCases.map(\.displayName))
         blockMaterialPopup.target = self
         blockMaterialPopup.action = #selector(blockMaterialPopupChanged)
@@ -64,33 +74,45 @@ final class DebugControlPanelView: NSVisualEffectView {
                 $0.action = #selector(toggleChanged(_:))
             }
 
+        let togglesGrid = NSGridView(views: [
+            [frustumToggle, occlusionToggle],
+            [lodToggle, hudToggle],
+            [minimapToggle, crosshairToggle],
+        ])
+        togglesGrid.translatesAutoresizingMaskIntoConstraints = false
+        togglesGrid.rowSpacing = 6
+        togglesGrid.columnSpacing = 14
+        togglesGrid.xPlacement = .leading
+
         let stack = NSStackView(views: [
             title,
-            materialLabel,
-            materialPopup,
-            lodTintLabel,
-            lodTintPopup,
-            blockMaterialLabel,
-            blockMaterialPopup,
-            frustumToggle,
-            occlusionToggle,
-            lodToggle,
-            hudToggle,
-            minimapToggle,
-            crosshairToggle,
+            subtitle,
+            makeDivider(),
+            makeSectionTitle("Quick controls"),
+            controlsStack,
+            makeDivider(),
+            makeSectionTitle("Visibility"),
+            togglesGrid,
+            makeDivider(),
+            makeSectionTitle("Camera"),
+            cameraSummaryLabel,
+            makeSectionTitle("World"),
+            worldSummaryLabel,
+            makeSectionTitle("Performance"),
+            performanceSummaryLabel,
         ])
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 8
+        stack.spacing = 10
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
 
         NSLayoutConstraint.activate([
-            widthAnchor.constraint(equalToConstant: 270),
-            stack.topAnchor.constraint(equalTo: topAnchor, constant: 12),
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
-            stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -12),
+            widthAnchor.constraint(equalToConstant: 320),
+            stack.topAnchor.constraint(equalTo: topAnchor, constant: 14),
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+            stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -14),
         ])
     }
 
@@ -107,7 +129,8 @@ final class DebugControlPanelView: NSVisualEffectView {
         lodEnabled: Bool,
         hudVisible: Bool,
         minimapVisible: Bool,
-        crosshairVisible: Bool
+        crosshairVisible: Bool,
+        snapshot: DebugHUDSnapshot
     ) {
         materialPopup.selectItem(at: MaterialDebugMode.allCases.firstIndex(of: materialMode) ?? 0)
         lodTintPopup.selectItem(
@@ -120,6 +143,13 @@ final class DebugControlPanelView: NSVisualEffectView {
         hudToggle.state = hudVisible ? .on : .off
         minimapToggle.state = minimapVisible ? .on : .off
         crosshairToggle.state = crosshairVisible ? .on : .off
+
+        cameraSummaryLabel.stringValue =
+            "Position  x=\(format(snapshot.cameraPosition.x))  y=\(format(snapshot.cameraPosition.y))  z=\(format(snapshot.cameraPosition.z))\nYaw  \(format(snapshot.yawDegrees))°    Pitch  \(format(snapshot.pitchDegrees))°\nTarget  \(snapshot.targetCellDescription)"
+        worldSummaryLabel.stringValue =
+            "Seed  \(snapshot.worldSeed.map(String.init) ?? "n/a")    Place  \(snapshot.selectedPlacementMaterial)\nVisible chunks  \(snapshot.visibleChunkCount)    Vertices  \(snapshot.vertexCount)\nLOD rings  \(snapshot.lodDistribution.isEmpty ? "none" : snapshot.lodDistribution)"
+        performanceSummaryLabel.stringValue =
+            "Frame time  \(format(snapshot.frameTimeMilliseconds)) ms\nFPS  \(format(snapshot.framesPerSecond))\nMaterial  \(snapshot.materialDebugMode)    Tint  \(snapshot.lodTintOverlayMode)"
     }
 
     @objc private func materialPopupChanged() {
@@ -158,5 +188,55 @@ final class DebugControlPanelView: NSVisualEffectView {
         default:
             break
         }
+    }
+
+    private func makeSectionTitle(_ title: String) -> NSTextField {
+        let label = NSTextField(labelWithString: title)
+        label.font = .systemFont(ofSize: 12, weight: .semibold)
+        label.textColor = .white
+        return label
+    }
+
+    private func makeDivider() -> NSBox {
+        let divider = NSBox()
+        divider.boxType = .separator
+        divider.translatesAutoresizingMaskIntoConstraints = false
+        return divider
+    }
+
+    private func makeLabeledControlRow(title: String, control: NSView) -> NSStackView {
+        let label = NSTextField(labelWithString: title)
+        label.textColor = NSColor.white.withAlphaComponent(0.86)
+        label.font = .systemFont(ofSize: 11, weight: .medium)
+
+        let row = NSStackView(views: [label, control])
+        row.orientation = .vertical
+        row.alignment = .leading
+        row.spacing = 4
+        return row
+    }
+
+    private func format(_ value: Float) -> String {
+        String(format: "%.2f", value)
+    }
+}
+
+@MainActor
+private final class DebugPanelSummaryLabel: NSTextField {
+    init() {
+        super.init(frame: .zero)
+        isEditable = false
+        isBordered = false
+        drawsBackground = false
+        isSelectable = false
+        font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+        textColor = NSColor.white.withAlphaComponent(0.9)
+        maximumNumberOfLines = 0
+        lineBreakMode = .byWordWrapping
+        setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
     }
 }
