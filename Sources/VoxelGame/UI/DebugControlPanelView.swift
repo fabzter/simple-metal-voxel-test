@@ -48,7 +48,7 @@ final class DebugControlPanelView: NSVisualEffectView {
 
         let lodTintLabel = NSTextField(labelWithString: "LOD tint overlay")
         lodTintLabel.textColor = .white
-        lodTintPopup.addItems(withTitles: [LODTintOverlayMode.off, .subtle].map(\.displayName))
+        lodTintPopup.addItems(withTitles: LODTintOverlayMode.allCases.map(\.displayName))
         lodTintPopup.target = self
         lodTintPopup.action = #selector(lodTintPopupChanged)
 
@@ -111,7 +111,7 @@ final class DebugControlPanelView: NSVisualEffectView {
     ) {
         materialPopup.selectItem(at: MaterialDebugMode.allCases.firstIndex(of: materialMode) ?? 0)
         lodTintPopup.selectItem(
-            at: [LODTintOverlayMode.off, .subtle].firstIndex(of: lodTintOverlayMode) ?? 0)
+            at: LODTintOverlayMode.allCases.firstIndex(of: lodTintOverlayMode) ?? 0)
         blockMaterialPopup.selectItem(
             at: BlockMaterialType.allCases.firstIndex(of: blockMaterial) ?? 0)
         frustumToggle.state = frustumEnabled ? .on : .off
@@ -129,10 +129,9 @@ final class DebugControlPanelView: NSVisualEffectView {
     }
 
     @objc private func lodTintPopupChanged() {
-        let modes: [LODTintOverlayMode] = [.off, .subtle]
         let index = lodTintPopup.indexOfSelectedItem
-        guard modes.indices.contains(index) else { return }
-        onLODOverlayModeChanged?(modes[index])
+        guard LODTintOverlayMode.allCases.indices.contains(index) else { return }
+        onLODOverlayModeChanged?(LODTintOverlayMode.allCases[index])
     }
 
     @objc private func blockMaterialPopupChanged() {

@@ -6,7 +6,7 @@ import simd
 // those rays hit some other chunk first, we treat the chunk as occluded. If any sample point is
 // directly visible (or the first hit belongs to the tested chunk), we keep it.
 struct ChunkOcclusionCuller {
-    private let raycaster = VoxelRaycaster(startDistance: 0.0, maxDistance: 256.0)
+    private let raycaster = VoxelRaycaster()
 
     func isVisible(chunkIndex: VoxelChunkIndex, world: VoxelWorld, camera: CameraState) -> Bool {
         let bounds = ChunkBounds.bounds(for: chunkIndex, chunkSize: world.chunkSize)

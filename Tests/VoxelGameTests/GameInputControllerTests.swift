@@ -46,14 +46,84 @@ struct GameInputControllerTests {
     }
 
     @MainActor
+    @Test
+    func keyUpClearsMovementEvenWhenGameplayInputIsDisabled() throws {
+        let controller = GameInputController()
+        let keyDown = try makeKeyDownEvent(
+            characters: "w", charactersIgnoringModifiers: "w", keyCode: 13)
+        let keyUp = try makeKeyUpEvent(
+            characters: "w", charactersIgnoringModifiers: "w", keyCode: 13)
+
+        controller.handle(keyDown, gameplayInputEnabled: true)
+        #expect(controller.currentInput.moveForward)
+
+        controller.handle(keyUp, gameplayInputEnabled: false)
+        #expect(!controller.currentInput.moveForward)
+    }
+
+    @MainActor
+    @Test
+    func cancelGameplayInputClearsMovementAndPendingEdits() throws {
+        let controller = GameInputController()
+        let keyDown = try makeKeyDownEvent(
+            characters: "d", charactersIgnoringModifiers: "d", keyCode: 2)
+        let removeEvent = try #require(
+            NSEvent.mouseEvent(
+                with: .leftMouseDown,
+                location: .zero,
+                modifierFlags: [],
+                timestamp: ProcessInfo.processInfo.systemUptime,
+                windowNumber: 0,
+                context: nil,
+                eventNumber: 0,
+                clickCount: 1,
+                pressure: 1))
+
+        controller.handle(keyDown, gameplayInputEnabled: true)
+        controller.handle(removeEvent, gameplayInputEnabled: true)
+
+        controller.cancelGameplayInput()
+
+        #expect(!controller.currentInput.moveRight)
+        #expect(controller.consumeEditActions().isEmpty)
+    }
+
+    @MainActor
     private func makeKeyDownEvent(
+        characters: String,
+        charactersIgnoringModifiers: String,
+        keyCode: UInt16
+    ) throws -> NSEvent {
+        try makeKeyEvent(
+            type: .keyDown,
+            characters: characters,
+            charactersIgnoringModifiers: charactersIgnoringModifiers,
+            keyCode: keyCode)
+    }
+
+    @MainActor
+    private func makeKeyUpEvent(
+        characters: String,
+        charactersIgnoringModifiers: String,
+        keyCode: UInt16
+    ) throws -> NSEvent {
+        try makeKeyEvent(
+            type: .keyUp,
+            characters: characters,
+            charactersIgnoringModifiers: charactersIgnoringModifiers,
+            keyCode: keyCode)
+    }
+
+    @MainActor
+    private func makeKeyEvent(
+        type: NSEvent.EventType,
         characters: String,
         charactersIgnoringModifiers: String,
         keyCode: UInt16
     ) throws -> NSEvent {
         try #require(
             NSEvent.keyEvent(
-                with: .keyDown,
+                with: type,
                 location: .zero,
                 modifierFlags: [],
                 timestamp: ProcessInfo.processInfo.systemUptime,

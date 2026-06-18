@@ -4,7 +4,6 @@ import Foundation
 // frame can be drawn. The app surfaces them to the user instead of crashing blindly.
 public enum RendererSetupError: LocalizedError {
     case commandQueueUnavailable
-    case uniformsBufferUnavailable
     case meshBufferUnavailable
     case materialAtlasUnavailable
     case highlightBufferUnavailable
@@ -16,8 +15,6 @@ public enum RendererSetupError: LocalizedError {
         switch self {
         case .commandQueueUnavailable:
             return "Failed to create the Metal command queue."
-        case .uniformsBufferUnavailable:
-            return "Failed to allocate the uniforms buffer."
         case .meshBufferUnavailable:
             return "Failed to allocate the world mesh buffer."
         case .materialAtlasUnavailable:

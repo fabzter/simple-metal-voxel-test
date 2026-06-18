@@ -34,7 +34,7 @@ vertex VertexOut vertex_main(VertexIn in [[stage_in]],
     out.uv = in.uv;
     out.materialMode = in.materialMode;
 
-    float3 lightDir = normalize(float3(0.5, -1.0, 0.2));
+    constexpr float3 lightDir = float3(0.44022545, -0.8804509, 0.17609018);
     out.lightAmount = max(dot(in.normal, -lightDir), 0.2);
 
     return out;
@@ -44,29 +44,36 @@ fragment float4 fragment_main(VertexOut in [[stage_in]],
                               constant Uniforms& uniforms [[buffer(1)]],
                               texture2d<half> materialAtlas [[texture(0)]]) {
     constexpr sampler atlasSampler(address::clamp_to_edge, min_filter::nearest, mag_filter::nearest);
+    const bool usesTextureMaterial = in.materialMode > 0.5;
+    const bool texturesOnly = uniforms.materialDebugMode > 1.5;
+    const bool flatColorsOnly = uniforms.materialDebugMode > 0.5 && uniforms.materialDebugMode <= 1.5;
 
     float3 flatColor = in.color;
-    half4 sampleColor = materialAtlas.sample(atlasSampler, in.uv);
-    float3 texturedColor = in.color * float3(sampleColor.rgb);
-    float2 tileCenterUV = floor(in.uv * 2.0) * 0.5 + float2(0.25, 0.25);
-    half4 tileCenterSample = materialAtlas.sample(atlasSampler, tileCenterUV);
-    float3 representativeFlatColor =
-        (in.materialMode > 0.5)
-        ? in.color * float3(tileCenterSample.rgb)
-        : flatColor;
+    float3 texturedColor = flatColor;
+    if (texturesOnly || (!flatColorsOnly && usesTextureMaterial)) {
+        half4 sampleColor = materialAtlas.sample(atlasSampler, in.uv);
+        texturedColor = in.color * float3(sampleColor.rgb);
+    }
+
+    float3 representativeFlatColor = flatColor;
+    if (flatColorsOnly && usesTextureMaterial) {
+        float2 tileCenterUV = floor(in.uv * 2.0) * 0.5 + float2(0.25, 0.25);
+        half4 tileCenterSample = materialAtlas.sample(atlasSampler, tileCenterUV);
+        representativeFlatColor = in.color * float3(tileCenterSample.rgb);
+    }
 
     float3 baseColor;
-    if (uniforms.materialDebugMode > 1.5) {
+    if (texturesOnly) {
         // Textures only: use sampled texture color, but keep a slight cool tint so the mode is
         // subtly and consistently distinguishable from hybrid.
         baseColor = texturedColor * float3(0.88, 0.94, 1.02);
-    } else if (uniforms.materialDebugMode > 0.5) {
+    } else if (flatColorsOnly) {
         // Flat only: collapse each material to a single representative color, not to gray. For
         // textured materials we sample the center of the atlas tile so the whole face becomes one
         // solid but still material-specific color.
         baseColor = representativeFlatColor * float3(1.02, 1.00, 0.98);
     } else {
-        baseColor = (in.materialMode > 0.5) ? texturedColor : flatColor;
+        baseColor = usesTextureMaterial ? texturedColor : flatColor;
     }
 
     if (uniforms.lodTintOverlayMode > 0.5) {

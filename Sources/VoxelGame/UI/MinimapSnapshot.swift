@@ -10,10 +10,12 @@ struct MinimapSnapshot {
     }
 
     let radius: Int
+    let yaw: Float
     let cells: [Cell]
 
-    init(scene: GameScene, radius: Int = 6) {
+    init(scene: GameScene, radius: Int = 8) {
         self.radius = radius
+        self.yaw = scene.player.cameraYaw
 
         let playerCell = Self.cell(for: scene.player.position)
         var collectedCells: [Cell] = []
@@ -23,7 +25,11 @@ struct MinimapSnapshot {
                 let worldX = playerCell.x + dx
                 let worldZ = playerCell.z + dz
 
-                if let topY = Self.topSolidY(in: scene.world, x: worldX, z: worldZ) {
+                if let topY = scene.world.topSolidY(
+                    inColumnX: worldX,
+                    z: worldZ,
+                    withinYRange: 0...(scene.world.gridSize - 1))
+                {
                     collectedCells.append(Cell(dx: dx, dz: dz, topY: topY))
                 }
             }
@@ -37,15 +43,5 @@ struct MinimapSnapshot {
             x: Int(floor(point.x + 0.5)),
             z: Int(floor(point.z + 0.5))
         )
-    }
-
-    private static func topSolidY(in world: VoxelWorld, x: Int, z: Int) -> Int? {
-        for y in stride(from: world.gridSize - 1, through: 0, by: -1) {
-            if world.isSolid(x: x, y: y, z: z) {
-                return y
-            }
-        }
-
-        return nil
     }
 }

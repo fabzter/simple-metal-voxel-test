@@ -17,11 +17,12 @@ public final class GameScene {
     public init(
         gridSize: Int = 64,
         worldGeneration: VoxelWorld.Generation = .terrain(.default),
-        player: PlayerController = PlayerController()
+        player: PlayerController? = nil
     ) {
         self.world = VoxelWorld(gridSize: gridSize, generation: worldGeneration)
-        self.player = player
-        self.currentTarget = raycaster.raycast(camera: player.camera, in: world)
+        let resolvedPlayer = player ?? Self.makeDefaultPlayer(for: world)
+        self.player = resolvedPlayer
+        self.currentTarget = raycaster.raycast(camera: resolvedPlayer.camera, in: world)
     }
 
     public func update(
@@ -114,5 +115,22 @@ public final class GameScene {
 
         currentEditFeedback.remainingTime -= dt
         self.currentEditFeedback = currentEditFeedback.remainingTime > 0 ? currentEditFeedback : nil
+    }
+
+    private static func makeDefaultPlayer(for world: VoxelWorld) -> PlayerController {
+        let maxIndex = max(0, world.gridSize - 1)
+        let spawnX = min(max(world.gridSize / 2, 0), maxIndex)
+        let spawnZ = min(max(world.gridSize / 2, 0), maxIndex)
+        let surfaceY =
+            world.topSolidY(
+                inColumnX: spawnX,
+                z: spawnZ,
+                withinYRange: 0...(world.gridSize - 1))
+            ?? max(1, world.gridSize / 4)
+
+        return PlayerController(
+            position: SIMD3<Float>(Float(spawnX) + 0.5, Float(surfaceY + 1), Float(spawnZ) + 0.5),
+            isGrounded: true,
+            cameraPitch: -0.2)
     }
 }

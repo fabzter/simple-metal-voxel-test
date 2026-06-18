@@ -129,7 +129,7 @@ public final class VoxelWorld {
         mesher.makeWorldMesh(for: self, chunkIndex: chunkIndex, voxelStride: voxelStride)
     }
 
-    func topSolidY(inColumnX x: Int, z: Int, withinYRange yRange: ClosedRange<Int>) -> Int? {
+    public func topSolidY(inColumnX x: Int, z: Int, withinYRange yRange: ClosedRange<Int>) -> Int? {
         let upper = min(yRange.upperBound, gridSize - 1)
         let lower = max(yRange.lowerBound, 0)
         guard lower <= upper else { return nil }

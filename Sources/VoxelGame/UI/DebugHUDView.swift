@@ -24,7 +24,7 @@ final class DebugHUDView: NSVisualEffectView {
         addSubview(label)
 
         NSLayoutConstraint.activate([
-            widthAnchor.constraint(equalToConstant: 380),
+            widthAnchor.constraint(equalToConstant: 420),
             label.topAnchor.constraint(equalTo: topAnchor, constant: 10),
             label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
             label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
@@ -51,9 +51,11 @@ final class DebugHUDView: NSVisualEffectView {
             Space          Jump
             Left click     Remove block
             Right click    Place block
+            Tab            Toggle debug panel
             M              Toggle material debug
             F1             Toggle HUD
             1-5            Select block type
+            1 Grass · 2 Dirt · 3 Stone · 4 Moss · 5 Snow
             Esc            Quit
 
             Camera

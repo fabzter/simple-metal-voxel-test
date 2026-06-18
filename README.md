@@ -4,6 +4,13 @@ VoxelGame is a small first-person voxel demo built directly on top of Apple's Me
 
 ## Build and run
 
+### Prerequisites
+
+- macOS with Xcode or the Xcode Command Line Tools installed
+- Metal command-line tools available through `xcrun`
+
+If `swift build` fails with `xcrun: error: unable to find utility "metal"`, install the Metal toolchain from Xcode first.
+
 ```bash
 swift build -c release
 ./.build/release/VoxelGame
@@ -24,10 +31,10 @@ Or use the helper script:
 | Space | Jump |
 | Left click | Remove block |
 | Right click | Place block |
-| Tab | Open debug panel |
+| Tab | Toggle debug panel and release/re-capture the mouse |
 | M | Toggle material debug mode |
 | F1 | Toggle HUD |
-| 1-5 | Select block type |
+| 1-5 | Select block type (`1` Grass, `2` Dirt, `3` Stone, `4` Moss, `5` Snow) |
 | Esc | Quit |
 
 ## Architecture overview

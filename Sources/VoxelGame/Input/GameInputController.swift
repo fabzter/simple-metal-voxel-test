@@ -4,6 +4,15 @@ import simd
 
 @MainActor
 final class GameInputController {
+    private enum KeyCode {
+        static let a: UInt16 = 0
+        static let s: UInt16 = 1
+        static let d: UInt16 = 2
+        static let w: UInt16 = 13
+        static let space: UInt16 = 49
+        static let tab: UInt16 = 48
+    }
+
     private var playerInput = PlayerInput()
     private var pendingLookDelta = SIMD2<Float>(repeating: 0)
     private var pendingEditActions: [BlockEditAction] = []
@@ -19,7 +28,7 @@ final class GameInputController {
     func handle(_ event: NSEvent, gameplayInputEnabled: Bool) {
         switch event.type {
         case .keyDown:
-            if event.keyCode == 48 {  // Tab
+            if event.keyCode == KeyCode.tab {
                 pendingPanelToggle = true
             }
             if event.specialKey == .f1 {
@@ -35,9 +44,7 @@ final class GameInputController {
                 setKeyState(for: event.keyCode, isPressed: true)
             }
         case .keyUp:
-            if gameplayInputEnabled {
-                setKeyState(for: event.keyCode, isPressed: false)
-            }
+            setKeyState(for: event.keyCode, isPressed: false)
         case .mouseMoved:
             if gameplayInputEnabled {
                 pendingLookDelta += SIMD2(Float(event.deltaX), Float(event.deltaY))
@@ -85,17 +92,23 @@ final class GameInputController {
         return pendingBlockMaterialSelection
     }
 
+    func cancelGameplayInput() {
+        playerInput = PlayerInput()
+        pendingLookDelta = .zero
+        pendingEditActions.removeAll(keepingCapacity: true)
+    }
+
     private func setKeyState(for keyCode: UInt16, isPressed: Bool) {
         switch keyCode {
-        case 13:
+        case KeyCode.w:
             playerInput.moveForward = isPressed
-        case 1:
+        case KeyCode.s:
             playerInput.moveBackward = isPressed
-        case 0:
+        case KeyCode.a:
             playerInput.moveLeft = isPressed
-        case 2:
+        case KeyCode.d:
             playerInput.moveRight = isPressed
-        case 49:
+        case KeyCode.space:
             playerInput.jump = isPressed
         default:
             break

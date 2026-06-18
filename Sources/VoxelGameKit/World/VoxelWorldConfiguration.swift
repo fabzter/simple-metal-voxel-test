@@ -1,13 +1,13 @@
 import Foundation
 
 // This configuration describes how the procedural voxel terrain is generated.
-// The terrain here is just the sum of two waves:
-// - one sine wave varying along X
-// - one cosine wave varying along Z
+// The current terrain uses layered deterministic noise:
+// - a broad rolling base
+// - a ridged detail layer
+// - a cave-carving pass below the surface
 //
-// `seed` does not create random caves or noise yet. Instead it deterministically shifts
-// the phase of those waves so the same seed always produces the same terrain and a
-// different seed moves the hills into a different arrangement.
+// `xFrequency` and `zFrequency` control the horizontal sampling scale, while
+// `xAmplitude` and `zAmplitude` shape the large and medium vertical variation.
 public struct VoxelWorldConfiguration: Sendable, Equatable {
     public var seed: UInt64
     public var baseHeight: Int

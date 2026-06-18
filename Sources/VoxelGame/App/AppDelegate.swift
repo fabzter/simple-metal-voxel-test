@@ -4,6 +4,7 @@ import CoreGraphics
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var window: NSWindow?
     private var gameView: MetalView?
+    private var eventMonitor: Any?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let frame = NSRect(x: 0, y: 0, width: 1024, height: 768)
@@ -15,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         window.title = "Physics Voxel Engine"
         window.center()
+        window.minSize = NSSize(width: 960, height: 640)
         window.acceptsMouseMovedEvents = true
 
         do {
@@ -33,10 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        CGDisplayHideCursor(CGMainDisplayID())
-        CGAssociateMouseAndMouseCursorPosition(0)
-
-        NSEvent.addLocalMonitorForEvents(
+        eventMonitor = NSEvent.addLocalMonitorForEvents(
             matching: [.keyDown, .keyUp, .mouseMoved, .leftMouseDown, .rightMouseDown]) {
                 [weak self] event in
                 if event.type == .keyDown && event.keyCode == 53 {
@@ -46,5 +45,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.gameView?.handleEvent(event)
                 return event
             }
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        true
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        if let eventMonitor {
+            NSEvent.removeMonitor(eventMonitor)
+            self.eventMonitor = nil
+        }
     }
 }

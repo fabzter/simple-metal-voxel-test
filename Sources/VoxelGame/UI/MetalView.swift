@@ -21,6 +21,7 @@ final class MetalView: NSView {
     private var isHUDVisible = true
     private var isMinimapVisible = true
     private var isCrosshairVisible = true
+    private var isMouseCaptured = false
 
     private var metalLayer: CAMetalLayer {
         guard let layer = layer as? CAMetalLayer else {
@@ -118,6 +119,9 @@ final class MetalView: NSView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         updateDrawableSize()
+        if window != nil && !isDebugPanelModeEnabled && !hasPresentedRuntimeError {
+            setMouseCapture(enabled: true)
+        }
     }
 
     override func viewWillMove(toWindow newWindow: NSWindow?) {
@@ -152,8 +156,8 @@ final class MetalView: NSView {
 
             minimapView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
             minimapView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -12),
-            minimapView.widthAnchor.constraint(equalToConstant: 180),
-            minimapView.heightAnchor.constraint(equalToConstant: 180),
+            minimapView.widthAnchor.constraint(equalToConstant: 200),
+            minimapView.heightAnchor.constraint(equalToConstant: 200),
 
             crosshairView.centerXAnchor.constraint(equalTo: centerXAnchor),
             crosshairView.centerYAnchor.constraint(equalTo: centerYAnchor),
@@ -216,11 +220,6 @@ final class MetalView: NSView {
                 toggleDebugPanelMode()
             }
 
-            guard !isDebugPanelModeEnabled else {
-                updateOverlayViews(frameTimeSeconds: dt)
-                return
-            }
-
             if inputController.consumeMaterialDebugToggle() {
                 renderer.materialDebugMode = renderer.materialDebugMode.next()
             }
@@ -233,11 +232,13 @@ final class MetalView: NSView {
                 updateOverlayViews()
             }
 
-            let lookDelta = inputController.consumeLookDelta()
-            let editActions = inputController.consumeEditActions()
-            scene.update(
-                dt: dt, input: inputController.currentInput, lookDelta: lookDelta,
-                editActions: editActions)
+            if !isDebugPanelModeEnabled {
+                let lookDelta = inputController.consumeLookDelta()
+                let editActions = inputController.consumeEditActions()
+                scene.update(
+                    dt: dt, input: inputController.currentInput, lookDelta: lookDelta,
+                    editActions: editActions)
+            }
 
             do {
                 try renderer.render(
@@ -279,17 +280,24 @@ final class MetalView: NSView {
 
     private func toggleDebugPanelMode() {
         isDebugPanelModeEnabled.toggle()
+        inputController.cancelGameplayInput()
         debugControlPanelView.isHidden = !isDebugPanelModeEnabled
         setMouseCapture(enabled: !isDebugPanelModeEnabled)
     }
 
     private func setMouseCapture(enabled: Bool) {
+        guard enabled != isMouseCaptured else {
+            return
+        }
+
         if enabled {
-            CGDisplayHideCursor(CGMainDisplayID())
+            NSCursor.hide()
             CGAssociateMouseAndMouseCursorPosition(0)
+            isMouseCaptured = true
         } else {
             CGAssociateMouseAndMouseCursorPosition(1)
-            CGDisplayShowCursor(CGMainDisplayID())
+            NSCursor.unhide()
+            isMouseCaptured = false
         }
     }
 
@@ -300,6 +308,7 @@ final class MetalView: NSView {
 
         hasPresentedRuntimeError = true
         gameLoop?.stop()
+        setMouseCapture(enabled: false)
         NSApp.presentError(error)
     }
 

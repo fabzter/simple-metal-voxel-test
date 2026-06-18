@@ -32,6 +32,33 @@ struct VoxelWorldTests {
     }
 
     @Test
+    func generatedTerrainIncludesSubsurfaceCaves() {
+        let world = VoxelWorld(gridSize: 48, generation: .terrain(.init(seed: 1234)))
+        var foundCave = false
+
+        for x in 0..<world.gridSize where !foundCave {
+            for z in 0..<world.gridSize where !foundCave {
+                guard
+                    let topY = world.topSolidY(
+                        inColumnX: x,
+                        z: z,
+                        withinYRange: 0...(world.gridSize - 1)),
+                    topY >= 8
+                else {
+                    continue
+                }
+
+                for y in 3..<(topY - 2) where !world.isSolid(x: x, y: y, z: z) {
+                    foundCave = true
+                    break
+                }
+            }
+        }
+
+        #expect(foundCave)
+    }
+
+    @Test
     func generatedTerrainStartsWithCleanMeshRevision() {
         let world = VoxelWorld(gridSize: 16, generation: .terrain(.default))
         #expect(world.meshRevision == 0)

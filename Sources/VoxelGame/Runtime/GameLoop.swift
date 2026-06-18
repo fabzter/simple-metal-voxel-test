@@ -24,6 +24,7 @@ final class GameLoop: NSObject {
             selector: #selector(tick),
             userInfo: nil,
             repeats: true)
+        timer.tolerance = 1.0 / 240.0
         self.timer = timer
         RunLoop.main.add(timer, forMode: .common)
     }

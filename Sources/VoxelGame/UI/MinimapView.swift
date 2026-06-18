@@ -28,7 +28,7 @@ final class MinimapView: NSView {
         super.draw(dirtyRect)
 
         NSColor.black.withAlphaComponent(0.55).setFill()
-        dirtyRect.fill()
+        bounds.fill()
 
         guard let snapshot else {
             return
@@ -51,6 +51,8 @@ final class MinimapView: NSView {
             height: cellSize * 0.5)
         NSColor.systemRed.setFill()
         NSBezierPath(ovalIn: playerRect).fill()
+
+        drawFacingIndicator(cellSize: cellSize, yaw: snapshot.yaw)
     }
 
     private func color(forTopY topY: Int) -> NSColor {
@@ -64,5 +66,31 @@ final class MinimapView: NSView {
             return NSColor(calibratedRed: 0.36, green: 0.55, blue: 0.36, alpha: 0.95)
         }
         return NSColor(calibratedWhite: 0.55, alpha: 0.95)
+    }
+
+    private func drawFacingIndicator(cellSize: CGFloat, yaw: Float) {
+        let center = CGPoint(x: bounds.midX, y: bounds.midY)
+        let direction = CGVector(dx: CGFloat(sin(yaw)), dy: CGFloat(cos(yaw)))
+        let tip = CGPoint(
+            x: center.x + direction.dx * cellSize * 1.8,
+            y: center.y + direction.dy * cellSize * 1.8)
+        let wing = CGVector(dx: -direction.dy, dy: direction.dx)
+
+        let path = NSBezierPath()
+        path.lineWidth = 2.5
+        path.move(to: center)
+        path.line(to: tip)
+        path.move(to: tip)
+        path.line(
+            to: CGPoint(
+                x: tip.x - direction.dx * cellSize * 0.7 + wing.dx * cellSize * 0.45,
+                y: tip.y - direction.dy * cellSize * 0.7 + wing.dy * cellSize * 0.45))
+        path.move(to: tip)
+        path.line(
+            to: CGPoint(
+                x: tip.x - direction.dx * cellSize * 0.7 - wing.dx * cellSize * 0.45,
+                y: tip.y - direction.dy * cellSize * 0.7 - wing.dy * cellSize * 0.45))
+        NSColor.white.withAlphaComponent(0.9).setStroke()
+        path.stroke()
     }
 }
