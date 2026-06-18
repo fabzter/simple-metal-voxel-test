@@ -11,12 +11,12 @@ public final class Renderer {
   private let depthState: MTLDepthStencilState
   private let projectionConfiguration: ProjectionConfiguration
   private let lodConfiguration: LODConfiguration
-  private let uniformsBuffer: MTLBuffer
   private let materialAtlas: MaterialAtlas
   private let occlusionCuller = ChunkOcclusionCuller()
 
   private var meshBufferCache: [ChunkLODKey: MeshBuffers]
   private var synchronizedChunkRevisions: [VoxelChunkIndex: UInt64]
+  private var lastChunkLODLevels: [VoxelChunkIndex: Int]
   private var selectionBuffer: MTLBuffer?
   private var overlayHit: VoxelRaycastHit?
   private var depthTexture: MTLTexture?
@@ -40,14 +40,6 @@ public final class Renderer {
       throw RendererSetupError.commandQueueUnavailable
     }
 
-    guard
-      let uniformsBuffer = device.makeBuffer(
-        length: MemoryLayout<Uniforms>.stride,
-        options: .storageModeShared)
-    else {
-      throw RendererSetupError.uniformsBufferUnavailable
-    }
-
     let shaderLibrary: ShaderLibrary
     do {
       shaderLibrary = try ShaderLibrary(device: device)
@@ -66,11 +58,11 @@ public final class Renderer {
     self.depthState = try RenderPipelineFactory.makeDepthState(device: device)
     self.projectionConfiguration = projectionConfiguration
     self.lodConfiguration = lodConfiguration
-    self.uniformsBuffer = uniformsBuffer
     self.materialAtlas = try MaterialAtlas(device: device)
     self.meshBufferCache = [:]
     self.synchronizedChunkRevisions = Dictionary(
       uniqueKeysWithValues: world.allChunkIndices().map { ($0, world.chunkRevision(for: $0)) })
+    self.lastChunkLODLevels = [:]
 
     resize(drawableSize: drawableSize)
   }
@@ -152,17 +144,16 @@ public final class Renderer {
     encoder.setDepthStencilState(depthState)
     encoder.setFragmentTexture(materialAtlas.texture, index: 0)
 
-    let cameraChunk = world.chunkIndex(
-      containing: VoxelIndex(
-        x: Int(floor(camera.position.x + 0.5)),
-        y: Int(floor(camera.position.y + 0.5)),
-        z: Int(floor(camera.position.z + 0.5))))
-
     var visibleChunkCount = 0
     var lodCounts: [Int: Int] = [:]
 
     for chunkIndex in world.allChunkIndices() {
-      guard let lodLevel = selectedLODLevel(for: chunkIndex, cameraChunk: cameraChunk) else {
+      guard
+        let lodLevel = selectedLODLevel(
+          for: chunkIndex,
+          cameraPosition: camera.position,
+          chunkSize: world.chunkSize)
+      else {
         continue
       }
 
@@ -171,6 +162,7 @@ public final class Renderer {
         continue
       }
       if debugSettings.occlusionCullingEnabled
+        && debugSettings.lodTintOverlayMode == .off
         && !occlusionCuller.isVisible(chunkIndex: chunkIndex, world: world, camera: camera)
       {
         continue
@@ -187,11 +179,10 @@ public final class Renderer {
         lodTintOverlayMode: debugSettings.lodTintOverlayMode,
         lodTintColor: lodTintColor(for: lodLevel),
         highlightColor: highlightColor)
-      memcpy(uniformsBuffer.contents(), &uniforms, MemoryLayout<Uniforms>.stride)
 
       encoder.setVertexBuffer(meshBuffers.vertexBuffer, offset: 0, index: 0)
-      encoder.setVertexBuffer(uniformsBuffer, offset: 0, index: 1)
-      encoder.setFragmentBuffer(uniformsBuffer, offset: 0, index: 1)
+      encoder.setVertexBytes(&uniforms, length: MemoryLayout<Uniforms>.stride, index: 1)
+      encoder.setFragmentBytes(&uniforms, length: MemoryLayout<Uniforms>.stride, index: 1)
       encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: meshBuffers.vertexCount)
     }
     currentVisibleChunkCount = visibleChunkCount
@@ -203,12 +194,11 @@ public final class Renderer {
         lodTintOverlayMode: .off,
         lodTintColor: SIMD4<Float>(0, 0, 0, 0),
         highlightColor: highlightColor)
-      memcpy(uniformsBuffer.contents(), &uniforms, MemoryLayout<Uniforms>.stride)
 
       encoder.setRenderPipelineState(highlightPipelineState)
       encoder.setVertexBuffer(selectionBuffer, offset: 0, index: 0)
-      encoder.setVertexBuffer(uniformsBuffer, offset: 0, index: 1)
-      encoder.setFragmentBuffer(uniformsBuffer, offset: 0, index: 1)
+      encoder.setVertexBytes(&uniforms, length: MemoryLayout<Uniforms>.stride, index: 1)
+      encoder.setFragmentBytes(&uniforms, length: MemoryLayout<Uniforms>.stride, index: 1)
       encoder.drawPrimitives(
         type: .line,
         vertexStart: 0,
@@ -235,24 +225,48 @@ public final class Renderer {
     return buffer
   }
 
-  private func selectedLODLevel(for chunkIndex: VoxelChunkIndex, cameraChunk: VoxelChunkIndex?)
-    -> Int?
-  {
-    guard let cameraChunk else { return 0 }
-    let distance = max(
-      abs(chunkIndex.x - cameraChunk.x),
-      abs(chunkIndex.y - cameraChunk.y),
-      abs(chunkIndex.z - cameraChunk.z)
-    )
+  // Selects an LOD level for a chunk using world-space distance from the camera to the chunk
+  // center, plus hysteresis to prevent chunks from rapidly flipping between levels when the
+  // camera is near a boundary.
+  private func selectedLODLevel(
+    for chunkIndex: VoxelChunkIndex,
+    cameraPosition: SIMD3<Float>,
+    chunkSize: Int
+  ) -> Int? {
+    let chunkCenter = SIMD3<Float>(
+      Float(chunkIndex.x * chunkSize + chunkSize / 2),
+      Float(chunkIndex.y * chunkSize + chunkSize / 2),
+      Float(chunkIndex.z * chunkSize + chunkSize / 2))
+
+    let distance = simd_length(chunkCenter - cameraPosition)
+    let worldHysteresis = Float(chunkSize) * 0.5
 
     if !debugSettings.lodEnabled {
-      return distance <= lodConfiguration.levels.last?.maxChunkDistance ?? 0 ? 0 : nil
+      let maxDistance =
+        Float(lodConfiguration.levels.last?.maxChunkDistance ?? 0) * Float(chunkSize)
+      return distance <= maxDistance ? 0 : nil
     }
 
-    for (index, level) in lodConfiguration.levels.enumerated()
-    where distance <= level.maxChunkDistance {
-      return index
+    let previousLevel = lastChunkLODLevels[chunkIndex]
+
+    for (index, level) in lodConfiguration.levels.enumerated() {
+      let threshold = Float(level.maxChunkDistance) * Float(chunkSize)
+
+      // Apply hysteresis: if this chunk was already at this level, require the camera to
+      // move past the threshold plus a margin before downgrading to a coarser level.
+      let effectiveThreshold: Float
+      if let previousLevel, previousLevel == index, index < lodConfiguration.levels.count - 1 {
+        effectiveThreshold = threshold + worldHysteresis
+      } else {
+        effectiveThreshold = threshold
+      }
+
+      if distance <= effectiveThreshold {
+        lastChunkLODLevels[chunkIndex] = index
+        return index
+      }
     }
+
     return nil
   }
 
@@ -303,11 +317,11 @@ public final class Renderer {
 
     switch lodLevel {
     case 0:
-      return SIMD4<Float>(0.15, 0.55, 1.0, 0.12)
+      return SIMD4<Float>(0, 0, 0, 0)
     case 1:
-      return SIMD4<Float>(1.0, 0.78, 0.12, 0.18)
+      return SIMD4<Float>(1.0, 0.80, 0.15, 0.30)
     default:
-      return SIMD4<Float>(1.0, 0.35, 0.18, 0.24)
+      return SIMD4<Float>(1.0, 0.25, 0.20, 0.30)
     }
   }
 

@@ -19,8 +19,8 @@ public struct LODConfiguration: Sendable, Equatable {
     }
 
     public static let `default` = LODConfiguration(levels: [
-        .init(maxChunkDistance: 3, voxelStride: 1),
-        .init(maxChunkDistance: 7, voxelStride: 2),
-        .init(maxChunkDistance: 11, voxelStride: 4),
+        .init(maxChunkDistance: 2, voxelStride: 1),
+        .init(maxChunkDistance: 5, voxelStride: 2),
+        .init(maxChunkDistance: 9, voxelStride: 4),
     ])
 }

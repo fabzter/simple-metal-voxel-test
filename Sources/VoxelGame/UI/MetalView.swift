@@ -224,6 +224,14 @@ final class MetalView: NSView {
             if inputController.consumeMaterialDebugToggle() {
                 renderer.materialDebugMode = renderer.materialDebugMode.next()
             }
+            if inputController.consumeHUDToggle() {
+                isHUDVisible.toggle()
+                debugHUDView.isHidden = !isHUDVisible
+            }
+            if let material = inputController.consumeBlockMaterialSelection() {
+                scene.selectedPlacementMaterial = material
+                updateOverlayViews()
+            }
 
             let lookDelta = inputController.consumeLookDelta()
             let editActions = inputController.consumeEditActions()

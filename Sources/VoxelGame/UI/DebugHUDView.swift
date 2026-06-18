@@ -52,6 +52,8 @@ final class DebugHUDView: NSVisualEffectView {
             Left click     Remove block
             Right click    Place block
             M              Toggle material debug
+            F1             Toggle HUD
+            1-5            Select block type
             Esc            Quit
 
             Camera

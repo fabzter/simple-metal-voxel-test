@@ -9,6 +9,8 @@ final class GameInputController {
     private var pendingEditActions: [BlockEditAction] = []
     private var pendingMaterialDebugToggle = false
     private var pendingPanelToggle = false
+    private var pendingHUDToggle = false
+    private var pendingBlockMaterialSelection: BlockMaterialType?
 
     var currentInput: PlayerInput {
         playerInput
@@ -23,6 +25,15 @@ final class GameInputController {
             if gameplayInputEnabled {
                 if event.charactersIgnoringModifiers?.lowercased() == "m" {
                     pendingMaterialDebugToggle = true
+                }
+                if event.keyCode == 122 {  // F1
+                    pendingHUDToggle = true
+                }
+                if let digit = event.charactersIgnoringModifiers, digit >= "1" && digit <= "5",
+                    let index = Int(String(digit)),
+                    BlockMaterialType.allCases.indices.contains(index - 1)
+                {
+                    pendingBlockMaterialSelection = BlockMaterialType.allCases[index - 1]
                 }
                 setKeyState(for: event.keyCode, isPressed: true)
             }
@@ -65,6 +76,16 @@ final class GameInputController {
     func consumePanelToggle() -> Bool {
         defer { pendingPanelToggle = false }
         return pendingPanelToggle
+    }
+
+    func consumeHUDToggle() -> Bool {
+        defer { pendingHUDToggle = false }
+        return pendingHUDToggle
+    }
+
+    func consumeBlockMaterialSelection() -> BlockMaterialType? {
+        defer { pendingBlockMaterialSelection = nil }
+        return pendingBlockMaterialSelection
     }
 
     private func setKeyState(for keyCode: UInt16, isPressed: Bool) {
