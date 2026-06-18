@@ -2,7 +2,7 @@
 
 VoxelGame is a small first-person voxel demo built directly on top of Apple's Metal API with Swift Package Manager. There is no game engine hiding the graphics work: the project opens a native AppKit window, builds chunk meshes from voxel data, and sends them to Metal for rendering so you can study the full path from world data to pixels on screen.
 
-The current build aims for a cleaner play view than a traditional always-on debug overlay: a compact HUD stays out of the center of the screen, transient banners confirm mode changes, and a larger debug inspector can be opened on demand.
+The current build aims for a cleaner play view than a traditional always-on debug overlay: a compact contextual HUD stays out of the center of the screen, transient banners confirm mode changes, and a larger debug inspector can be opened on demand. The world generation now blends broad traversable plains, hillier pockets, and cave-rich regions so the terrain is easier to roam while still leaving space to explore.
 
 ## Build and run
 
@@ -48,6 +48,7 @@ Or use the helper script:
 ## Key concepts
 
 - **Voxels** — `Sources/VoxelGameKit/World/VoxelWorld.swift` stores the world as solid or empty cells plus their material data. This is the core 3D grid everything else reads from.
+- **Terrain generation** — `Sources/VoxelGameKit/World/VoxelTerrainGenerator.swift` blends low-frequency plains, hill masks, domain warping, and depth-aware cave carving to create a more traversable but still exploratory world.
 - **Chunking** — `Sources/VoxelGameKit/World/VoxelChunkIndex.swift` divides the world into fixed-size chunk coordinates. Working chunk-by-chunk keeps updates and rendering manageable instead of touching the whole world every frame.
 - **Meshing** — `Sources/VoxelGameKit/World/VoxelMesher.swift` turns visible voxel faces into triangles the GPU can draw. Voxels are easy to edit, but GPUs need vertex data.
 - **Level of Detail (LOD)** — `Sources/VoxelGameKit/Rendering/LODConfiguration.swift` defines how distant chunks switch to coarser voxel sampling. This lowers vertex count for far-away terrain where fine detail is harder to see.

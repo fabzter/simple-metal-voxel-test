@@ -23,6 +23,7 @@ final class MetalView: NSView {
     private var isMinimapVisible = true
     private var isCrosshairVisible = true
     private var isMouseCaptured = false
+    private var hasShownWelcomeHint = false
 
     private var metalLayer: CAMetalLayer {
         guard let layer = layer as? CAMetalLayer else {
@@ -126,6 +127,13 @@ final class MetalView: NSView {
         updateDrawableSize()
         if window != nil && !isDebugPanelModeEnabled && !hasPresentedRuntimeError {
             setMouseCapture(enabled: true)
+            if !hasShownWelcomeHint {
+                hasShownWelcomeHint = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+                    self?.showStatusBanner(
+                        "Tab debug inspector  ·  1–5 switch block  ·  F1 toggle HUD", duration: 2.8)
+                }
+            }
         }
     }
 
@@ -157,8 +165,8 @@ final class MetalView: NSView {
         addSubview(statusBannerView)
 
         NSLayoutConstraint.activate([
-            debugHUDView.topAnchor.constraint(equalTo: topAnchor, constant: 12),
-            debugHUDView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            debugHUDView.centerXAnchor.constraint(equalTo: centerXAnchor),
+            debugHUDView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -18),
 
             minimapView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
             minimapView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -12),
@@ -286,7 +294,8 @@ final class MetalView: NSView {
 
         debugHUDView.update(snapshot: snapshot)
         minimapView.update(snapshot: MinimapSnapshot(scene: scene))
-        crosshairView.update(hasTarget: scene.currentTarget != nil)
+        crosshairView.update(
+            hasTarget: scene.currentTarget != nil, editFeedback: scene.currentEditFeedback)
         debugControlPanelView.update(
             materialMode: renderer.debugSettings.materialMode,
             lodTintOverlayMode: renderer.debugSettings.lodTintOverlayMode,
@@ -338,6 +347,10 @@ final class MetalView: NSView {
 
     private func showStatusBanner(_ message: String) {
         statusBannerView.show(message: message)
+    }
+
+    private func showStatusBanner(_ message: String, duration: TimeInterval) {
+        statusBannerView.show(message: message, duration: duration)
     }
 
     private static func makeDrawableSize(for frame: NSRect, backingScaleFactor: CGFloat?) -> CGSize

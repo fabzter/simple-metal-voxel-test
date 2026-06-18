@@ -59,6 +59,86 @@ struct VoxelWorldTests {
     }
 
     @Test
+    func generatedTerrainContainsWalkablePlainStretch() {
+        let world = VoxelWorld(gridSize: 64, generation: .terrain(.init(seed: 4321)))
+        let requiredRunLength = 10
+        var foundStretch = false
+
+        for z in 0..<world.gridSize where !foundStretch {
+            var currentRun = 0
+            var previousHeight: Int?
+
+            for x in 0..<world.gridSize {
+                guard
+                    let height = world.topSolidY(
+                        inColumnX: x,
+                        z: z,
+                        withinYRange: 0...(world.gridSize - 1))
+                else {
+                    currentRun = 0
+                    previousHeight = nil
+                    continue
+                }
+
+                if let previousHeight, abs(height - previousHeight) <= 1 {
+                    currentRun += 1
+                } else {
+                    currentRun = 1
+                }
+
+                previousHeight = height
+                if currentRun >= requiredRunLength {
+                    foundStretch = true
+                    break
+                }
+            }
+        }
+
+        #expect(foundStretch)
+    }
+
+    @Test
+    func generatedTerrainIncludesNearSurfaceCaveOpenings() {
+        let world = VoxelWorld(gridSize: 64, generation: .terrain(.init(seed: 2468)))
+        var foundOpening = false
+
+        for x in 1..<(world.gridSize - 1) where !foundOpening {
+            for z in 1..<(world.gridSize - 1) where !foundOpening {
+                guard
+                    let topY = world.topSolidY(
+                        inColumnX: x,
+                        z: z,
+                        withinYRange: 0...(world.gridSize - 1)),
+                    topY >= 8
+                else {
+                    continue
+                }
+
+                let searchUpperY = max(3, topY - 1)
+                let searchLowerY = max(3, topY - 5)
+                for y in stride(from: searchUpperY, through: searchLowerY, by: -1) {
+                    guard !world.isSolid(x: x, y: y, z: z) else {
+                        continue
+                    }
+
+                    let hasSolidRoof = world.isSolid(x: x, y: y + 1, z: z)
+                    let hasSideConnection =
+                        !world.isSolid(x: x + 1, y: y, z: z)
+                        || !world.isSolid(x: x - 1, y: y, z: z)
+                        || !world.isSolid(x: x, y: y, z: z + 1)
+                        || !world.isSolid(x: x, y: y, z: z - 1)
+                    if hasSolidRoof && hasSideConnection {
+                        foundOpening = true
+                        break
+                    }
+                }
+            }
+        }
+
+        #expect(foundOpening)
+    }
+
+    @Test
     func generatedTerrainStartsWithCleanMeshRevision() {
         let world = VoxelWorld(gridSize: 16, generation: .terrain(.default))
         #expect(world.meshRevision == 0)

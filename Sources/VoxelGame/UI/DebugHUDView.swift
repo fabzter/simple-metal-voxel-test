@@ -2,10 +2,8 @@ import AppKit
 
 @MainActor
 final class DebugHUDView: NSVisualEffectView {
-    private let shortcutLabel = NSTextField(labelWithString: "")
-    private let targetLabel = NSTextField(labelWithString: "")
-    private let statusLabel = NSTextField(labelWithString: "")
-    private let perfLabel = NSTextField(labelWithString: "")
+    private let primaryLabel = NSTextField(labelWithString: "")
+    private let secondaryLabel = NSTextField(labelWithString: "")
     private let stack = NSStackView()
 
     override init(frame frameRect: NSRect) {
@@ -15,35 +13,33 @@ final class DebugHUDView: NSVisualEffectView {
         blendingMode = .withinWindow
         state = .active
         wantsLayer = true
-        layer?.cornerRadius = 14
+        layer?.cornerRadius = 18
         layer?.borderWidth = 1
-        layer?.borderColor = NSColor.white.withAlphaComponent(0.08).cgColor
+        layer?.borderColor = NSColor.white.withAlphaComponent(0.07).cgColor
         translatesAutoresizingMaskIntoConstraints = false
 
-        shortcutLabel.font = .systemFont(ofSize: 11, weight: .medium)
-        shortcutLabel.textColor = NSColor.white.withAlphaComponent(0.82)
+        primaryLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        primaryLabel.textColor = .white
+        primaryLabel.lineBreakMode = .byTruncatingTail
+        primaryLabel.maximumNumberOfLines = 1
 
-        [targetLabel, statusLabel, perfLabel].forEach {
-            $0.font = .monospacedSystemFont(ofSize: 12, weight: .medium)
-            $0.textColor = .white
-            $0.lineBreakMode = .byTruncatingTail
-            $0.maximumNumberOfLines = 1
-        }
-
-        perfLabel.textColor = NSColor.white.withAlphaComponent(0.86)
+        secondaryLabel.font = .systemFont(ofSize: 11, weight: .regular)
+        secondaryLabel.textColor = NSColor.white.withAlphaComponent(0.72)
+        secondaryLabel.lineBreakMode = .byTruncatingTail
+        secondaryLabel.maximumNumberOfLines = 1
 
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 4
+        stack.spacing = 2
         stack.translatesAutoresizingMaskIntoConstraints = false
-        [shortcutLabel, targetLabel, statusLabel, perfLabel].forEach(stack.addArrangedSubview(_:))
+        [primaryLabel, secondaryLabel].forEach(stack.addArrangedSubview(_:))
         addSubview(stack)
 
         NSLayoutConstraint.activate([
-            widthAnchor.constraint(equalToConstant: 280),
+            widthAnchor.constraint(lessThanOrEqualToConstant: 360),
             stack.topAnchor.constraint(equalTo: topAnchor, constant: 10),
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
             stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10),
         ])
     }
@@ -53,25 +49,36 @@ final class DebugHUDView: NSVisualEffectView {
     }
 
     func update(snapshot: DebugHUDSnapshot) {
-        shortcutLabel.stringValue = "Tab Debug  ·  F1 HUD  ·  1–5 Block"
-        targetLabel.stringValue = "Target  \(snapshot.targetCellDescription)"
-        let renderMode =
-            snapshot.materialDebugMode == "Textured + flat-color"
-            ? "Standard view"
-            : snapshot.materialDebugMode
-        let tintMode =
-            snapshot.lodTintOverlayMode == "LOD tint off"
-            ? nil
-            : snapshot.lodTintOverlayMode
-        statusLabel.stringValue =
-            ["Place  \(snapshot.selectedPlacementMaterial)", renderMode, tintMode]
-            .compactMap { $0 }
-            .joined(separator: "  ·  ")
-        perfLabel.stringValue =
-            "\(format(snapshot.framesPerSecond)) FPS  ·  \(snapshot.visibleChunkCount) chunks  ·  \(snapshot.lodDistribution.isEmpty ? "LOD none" : snapshot.lodDistribution)"
+        primaryLabel.stringValue = "Place  \(snapshot.selectedPlacementMaterial)"
+
+        var secondaryParts: [String] = []
+        if let targetMaterial = snapshot.targetMaterial {
+            var targetSummary = "Target  \(targetMaterial)"
+            if let face = snapshot.targetFace {
+                targetSummary += " · \(face)"
+            }
+            if let distance = snapshot.targetDistanceMeters {
+                targetSummary += " · \(format(distance))m"
+            }
+            secondaryParts.append(targetSummary)
+        }
+
+        var modeParts: [String] = []
+        if snapshot.materialDebugMode != "Textured + flat-color" {
+            modeParts.append(snapshot.materialDebugMode)
+        }
+        if snapshot.lodTintOverlayMode != "LOD tint off" {
+            modeParts.append(snapshot.lodTintOverlayMode)
+        }
+        if !modeParts.isEmpty {
+            secondaryParts.append(modeParts.joined(separator: " · "))
+        }
+
+        secondaryLabel.stringValue = secondaryParts.joined(separator: "    ")
+        secondaryLabel.isHidden = secondaryParts.isEmpty
     }
 
     private func format(_ value: Float) -> String {
-        String(format: "%.0f", value)
+        String(format: "%.1f", value)
     }
 }

@@ -18,11 +18,11 @@ public struct VoxelWorldConfiguration: Sendable, Equatable {
 
     public init(
         seed: UInt64 = 0,
-        baseHeight: Int = 15,
-        xFrequency: Float = 0.2,
-        zFrequency: Float = 0.2,
-        xAmplitude: Float = 4.0,
-        zAmplitude: Float = 3.0
+        baseHeight: Int = 18,
+        xFrequency: Float = 0.018,
+        zFrequency: Float = 0.018,
+        xAmplitude: Float = 9.0,
+        zAmplitude: Float = 7.0
     ) {
         self.seed = seed
         self.baseHeight = baseHeight

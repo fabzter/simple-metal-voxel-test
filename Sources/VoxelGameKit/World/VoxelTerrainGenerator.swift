@@ -40,63 +40,131 @@ struct VoxelTerrainGenerator {
     private func parameters(from seed: UInt64) -> TerrainSeedParameters {
         var generator = SeededValueGenerator(state: seed)
 
-        let xFrequencyScale = 0.85 + 0.3 * generator.nextUnitValue()
-        let zFrequencyScale = 0.85 + 0.3 * generator.nextUnitValue()
-        let xAmplitudeScale = 0.85 + 0.3 * generator.nextUnitValue()
-        let zAmplitudeScale = 0.85 + 0.3 * generator.nextUnitValue()
+        let xFrequencyScale = 0.92 + 0.16 * generator.nextUnitValue()
+        let zFrequencyScale = 0.92 + 0.16 * generator.nextUnitValue()
+        let xAmplitudeScale = 0.9 + 0.2 * generator.nextUnitValue()
+        let zAmplitudeScale = 0.9 + 0.2 * generator.nextUnitValue()
 
         return TerrainSeedParameters(
             xFrequency: configuration.xFrequency * xFrequencyScale,
             zFrequency: configuration.zFrequency * zFrequencyScale,
             xAmplitude: configuration.xAmplitude * xAmplitudeScale,
             zAmplitude: configuration.zAmplitude * zAmplitudeScale,
-            baseOffset: SIMD2<Float>(
+            broadOffset: SIMD2<Float>(
+                generator.nextSignedValue() * 64, generator.nextSignedValue() * 64),
+            biomeOffset: SIMD2<Float>(
+                generator.nextSignedValue() * 64, generator.nextSignedValue() * 64),
+            plainsOffset: SIMD2<Float>(
+                generator.nextSignedValue() * 64, generator.nextSignedValue() * 64),
+            hillsOffset: SIMD2<Float>(
+                generator.nextSignedValue() * 64, generator.nextSignedValue() * 64),
+            mountainOffset: SIMD2<Float>(
                 generator.nextSignedValue() * 64, generator.nextSignedValue() * 64),
             ridgeOffset: SIMD2<Float>(
                 generator.nextSignedValue() * 64, generator.nextSignedValue() * 64),
             detailOffset: SIMD2<Float>(
                 generator.nextSignedValue() * 64, generator.nextSignedValue() * 64),
+            terrainWarpOffset: SIMD2<Float>(
+                generator.nextSignedValue() * 64, generator.nextSignedValue() * 64),
             caveOffset: SIMD3<Float>(
                 generator.nextSignedValue() * 64,
                 generator.nextSignedValue() * 64,
                 generator.nextSignedValue() * 64),
-            caveFrequency: 0.10 + 0.03 * generator.nextUnitValue(),
-            caveVerticalFrequency: 0.12 + 0.04 * generator.nextUnitValue())
+            caveRegionOffset: SIMD2<Float>(
+                generator.nextSignedValue() * 64, generator.nextSignedValue() * 64),
+            caveWarpOffset: SIMD3<Float>(
+                generator.nextSignedValue() * 64,
+                generator.nextSignedValue() * 64,
+                generator.nextSignedValue() * 64),
+            caveFrequency: 0.075 + 0.015 * generator.nextUnitValue(),
+            caveVerticalFrequency: 0.085 + 0.015 * generator.nextUnitValue())
     }
 
     private func terrainHeight(x: Int, z: Int, seedParameters: TerrainSeedParameters) -> Int {
         let sample = SIMD2<Float>(Float(x), Float(z))
+        let warpedSample =
+            sample
+            + vectorWarp2(
+                sample * min(seedParameters.xFrequency, seedParameters.zFrequency) * 0.55
+                    + seedParameters.terrainWarpOffset,
+                seedX: 0xA53C_9E12_D41B_A8C1,
+                seedY: 0xBF58_476D_1CE4_E5B9,
+                magnitude: 18)
         let baseSample = SIMD2<Float>(
-            sample.x * seedParameters.xFrequency,
-            sample.y * seedParameters.zFrequency)
+            warpedSample.x * seedParameters.xFrequency,
+            warpedSample.y * seedParameters.zFrequency)
 
-        let broadHills = fbm2(
-            baseSample + seedParameters.baseOffset,
-            seed: 0xA53C_9E12_D41B_A8C1,
+        let biomeNoise = fbm2(
+            baseSample * 0.26 + seedParameters.biomeOffset,
+            seed: 0x5B8D_80CE_A9D1_4F27,
+            octaves: 3,
+            lacunarity: 2.0,
+            persistence: 0.5)
+        let hilliness = smoothRange(0.58, 0.84, biomeNoise)
+        let mountainMask = pow(
+            smoothRange(
+                0.70,
+                0.92,
+                fbm2(
+                    baseSample * 0.34 + seedParameters.mountainOffset,
+                    seed: 0x9E37_79B9_7F4A_7C15,
+                    octaves: 3,
+                    lacunarity: 2.0,
+                    persistence: 0.5)),
+            1.35)
+
+        let broadShape = fbm2(
+            baseSample * 0.42 + seedParameters.broadOffset,
+            seed: 0xC13F_A9A9_02A6_328F,
             octaves: 4,
             lacunarity: 2.0,
             persistence: 0.5)
-        let ridges = ridge(
-            fbm2(
-                baseSample * 2.1 + seedParameters.ridgeOffset,
-                seed: 0x5B8D_80CE_A9D1_4F27,
-                octaves: 3,
-                lacunarity: 2.15,
-                persistence: 0.55))
-        let detail = fbm2(
-            baseSample * 4.0 + seedParameters.detailOffset,
+        let plainsNoise = fbm2(
+            baseSample * 0.82 + seedParameters.plainsOffset,
+            seed: 0x1656_67B1_9E37_79F9,
+            octaves: 3,
+            lacunarity: 2.0,
+            persistence: 0.5)
+        let rollingHills = fbm2(
+            baseSample * 1.15 + seedParameters.hillsOffset,
             seed: 0x94D0_49BB_1331_11EB,
+            octaves: 4,
+            lacunarity: 2.05,
+            persistence: 0.52)
+        let ridgeNoise = ridge(
+            fbm2(
+                baseSample * 1.75 + seedParameters.ridgeOffset,
+                seed: 0xBF58_476D_1CE4_E5B9,
+                octaves: 3,
+                lacunarity: 2.1,
+                persistence: 0.56))
+        let detail = fbm2(
+            baseSample * 3.2 + seedParameters.detailOffset,
+            seed: 0x632B_E59B_D9B4_E019,
             octaves: 2,
-            lacunarity: 2.35,
-            persistence: 0.6)
+            lacunarity: 2.25,
+            persistence: 0.55)
 
-        let rollingHeight = (broadHills - 0.5) * (seedParameters.xAmplitude * 2.4)
-        let ridgeHeight = ridges * (seedParameters.zAmplitude * 1.8)
+        let plainsHeight =
+            Float(configuration.baseHeight)
+            + (broadShape - 0.5) * (seedParameters.xAmplitude * 0.75)
+            + (plainsNoise - 0.5) * (seedParameters.zAmplitude * 0.55)
+
+        let hillsHeight =
+            Float(configuration.baseHeight)
+            + (broadShape - 0.5) * (seedParameters.xAmplitude * 1.65)
+            + (rollingHills - 0.5) * (seedParameters.zAmplitude * 1.45)
+            + ridgeNoise * (seedParameters.zAmplitude * 1.2 + mountainMask * 4.5)
+
+        let blendedHeight = lerp(plainsHeight, hillsHeight, t: hilliness)
         let detailHeight =
-            (detail - 0.5) * min(seedParameters.xAmplitude, seedParameters.zAmplitude)
+            (detail - 0.5)
+            * lerp(
+                0.45, min(seedParameters.xAmplitude, seedParameters.zAmplitude) * 0.65, t: hilliness
+            )
+        let mountainLift = mountainMask * (seedParameters.zAmplitude * 2.4)
 
-        return Int(
-            round(Float(configuration.baseHeight) + rollingHeight + ridgeHeight + detailHeight))
+        return Int(round(blendedHeight + detailHeight + mountainLift))
     }
 
     private func shouldCarveCave(
@@ -106,34 +174,74 @@ struct VoxelTerrainGenerator {
         surfaceY: Int,
         seedParameters: TerrainSeedParameters
     ) -> Bool {
-        guard y > 4, y < surfaceY - 3 else {
+        guard y > 4, y < surfaceY - 2 else {
             return false
         }
 
-        let caveSample =
-            SIMD3<Float>(
-                Float(x) * seedParameters.caveFrequency,
-                Float(y) * seedParameters.caveVerticalFrequency,
-                Float(z) * seedParameters.caveFrequency
-            ) + seedParameters.caveOffset
+        let depthBelowSurface = Float(surfaceY - y) / Float(max(surfaceY, 1))
+        let caveRegion = smoothRange(
+            0.52,
+            0.86,
+            fbm2(
+                SIMD2<Float>(Float(x), Float(z))
+                    * min(seedParameters.xFrequency, seedParameters.zFrequency) * 0.75
+                    + seedParameters.caveRegionOffset,
+                seed: 0xD6E8_FD50_76A3_9B25,
+                octaves: 3,
+                lacunarity: 2.0,
+                persistence: 0.5))
 
-        let caveNoise = fbm3(
-            caveSample,
-            seed: 0x9E37_79B9_7F4A_7C15,
-            octaves: 3,
+        guard caveRegion > 0.08 || depthBelowSurface > 0.30 else {
+            return false
+        }
+
+        let caveBase = SIMD3<Float>(
+            Float(x) * seedParameters.caveFrequency,
+            Float(y) * seedParameters.caveVerticalFrequency,
+            Float(z) * seedParameters.caveFrequency)
+        let warpedCaveSample =
+            caveBase
+            + vectorWarp3(
+                caveBase * 0.7 + seedParameters.caveWarpOffset,
+                seedX: 0x9E37_79B9_7F4A_7C15,
+                seedY: 0xBF58_476D_1CE4_E5B9,
+                seedZ: 0x94D0_49BB_1331_11EB,
+                magnitude: 0.9)
+            + seedParameters.caveOffset
+
+        let tunnelNoise = abs(
+            fbm3(
+                warpedCaveSample,
+                seed: 0x632B_E59B_D9B4_E019,
+                octaves: 3,
+                lacunarity: 2.0,
+                persistence: 0.5) - 0.5)
+        let chamberNoise = fbm3(
+            warpedCaveSample * 0.58,
+            seed: 0x8CB9_2BA7_2F3D_8DD7,
+            octaves: 2,
             lacunarity: 2.0,
             persistence: 0.52)
-        let cavernBias = ridge(
+        let entranceNoise = ridge(
             fbm2(
-                SIMD2<Float>(caveSample.x, caveSample.z) * 0.55,
-                seed: 0xBF58_476D_1CE4_E5B9,
+                SIMD2<Float>(warpedCaveSample.x, warpedCaveSample.z) * 0.9,
+                seed: 0x1656_67B1_9E37_79F9,
                 octaves: 2,
                 lacunarity: 2.0,
                 persistence: 0.5))
-        let depthBelowSurface = Float(surfaceY - y) / Float(max(surfaceY, 1))
-        let threshold = 0.76 - cavernBias * 0.10
 
-        return caveNoise > threshold && depthBelowSurface > 0.18
+        let tunnelWidth = lerp(0.032, 0.085, t: caveRegion * 0.75 + depthBelowSurface * 0.25)
+        let chamberThreshold = 0.84 - caveRegion * 0.16 - depthBelowSurface * 0.08
+
+        let carveTunnel = tunnelNoise < tunnelWidth && chamberNoise > 0.38
+        let carveChamber = chamberNoise > chamberThreshold && depthBelowSurface > 0.22
+        let carveEntrance =
+            tunnelNoise < tunnelWidth * 0.85
+            && entranceNoise > 0.58
+            && caveRegion > 0.45
+            && depthBelowSurface > 0.08
+
+        return carveTunnel || carveChamber || carveEntrance
     }
 
     private func fbm2(
@@ -235,6 +343,30 @@ struct VoxelTerrainGenerator {
         return Float(Double(value) / Double(UInt64.max))
     }
 
+    private func vectorWarp2(
+        _ point: SIMD2<Float>,
+        seedX: UInt64,
+        seedY: UInt64,
+        magnitude: Float
+    ) -> SIMD2<Float> {
+        let x = valueNoise2(point, seed: seedX) * 2 - 1
+        let y = valueNoise2(point, seed: seedY) * 2 - 1
+        return SIMD2<Float>(x, y) * magnitude
+    }
+
+    private func vectorWarp3(
+        _ point: SIMD3<Float>,
+        seedX: UInt64,
+        seedY: UInt64,
+        seedZ: UInt64,
+        magnitude: Float
+    ) -> SIMD3<Float> {
+        let x = valueNoise3(point, seed: seedX) * 2 - 1
+        let y = valueNoise3(point, seed: seedY) * 2 - 1
+        let z = valueNoise3(point, seed: seedZ) * 2 - 1
+        return SIMD3<Float>(x, y, z) * magnitude
+    }
+
     private func ridge(_ value: Float) -> Float {
         1 - abs(2 * value - 1)
     }
@@ -246,6 +378,19 @@ struct VoxelTerrainGenerator {
     private func smoothstep(_ t: Float) -> Float {
         t * t * (3 - 2 * t)
     }
+
+    private func smoothRange(_ lowerBound: Float, _ upperBound: Float, _ value: Float) -> Float {
+        guard upperBound > lowerBound else {
+            return value >= upperBound ? 1 : 0
+        }
+
+        let normalized = clamp((value - lowerBound) / (upperBound - lowerBound), lower: 0, upper: 1)
+        return smoothstep(normalized)
+    }
+
+    private func clamp(_ value: Float, lower: Float, upper: Float) -> Float {
+        max(lower, min(upper, value))
+    }
 }
 
 private struct TerrainSeedParameters {
@@ -253,10 +398,17 @@ private struct TerrainSeedParameters {
     let zFrequency: Float
     let xAmplitude: Float
     let zAmplitude: Float
-    let baseOffset: SIMD2<Float>
+    let broadOffset: SIMD2<Float>
+    let biomeOffset: SIMD2<Float>
+    let plainsOffset: SIMD2<Float>
+    let hillsOffset: SIMD2<Float>
+    let mountainOffset: SIMD2<Float>
     let ridgeOffset: SIMD2<Float>
     let detailOffset: SIMD2<Float>
+    let terrainWarpOffset: SIMD2<Float>
     let caveOffset: SIMD3<Float>
+    let caveRegionOffset: SIMD2<Float>
+    let caveWarpOffset: SIMD3<Float>
     let caveFrequency: Float
     let caveVerticalFrequency: Float
 }

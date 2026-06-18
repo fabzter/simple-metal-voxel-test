@@ -14,6 +14,9 @@ struct DebugHUDSnapshot {
     let materialDebugMode: String
     let lodTintOverlayMode: String
     let selectedPlacementMaterial: String
+    let targetMaterial: String?
+    let targetFace: String?
+    let targetDistanceMeters: Float?
     let targetCellDescription: String
     let frameTimeMilliseconds: Float
     let framesPerSecond: Float
@@ -34,11 +37,18 @@ struct DebugHUDSnapshot {
         frameTimeMilliseconds = frameTimeSeconds * 1000.0
         framesPerSecond = frameTimeSeconds > 0.0001 ? 1.0 / frameTimeSeconds : 0
 
-        if let target = scene.currentTarget?.solidCell {
-            let face = scene.currentTarget?.face?.label ?? "unknown"
+        if let hit = scene.currentTarget, let target = scene.currentTarget?.solidCell {
+            let face = hit.face?.label ?? "unknown"
             targetCellDescription = "(\(target.x), \(target.y), \(target.z)) [\(face)]"
+            targetMaterial =
+                scene.world.materialType(x: target.x, y: target.y, z: target.z)?.displayName
+            targetFace = hit.face?.label
+            targetDistanceMeters = hit.distance
         } else {
             targetCellDescription = "none"
+            targetMaterial = nil
+            targetFace = nil
+            targetDistanceMeters = nil
         }
 
         switch scene.world.generation {
