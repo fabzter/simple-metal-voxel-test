@@ -16,8 +16,19 @@ jobs:
       - name: Select installed Xcode
         run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 
-      - name: Install Metal Toolchain
-        run: xcodebuild -downloadComponent MetalToolchain
+      - name: Ensure Metal toolchain is available
+        # The Metal toolchain is bundled with Xcode 16.x (the default on
+        # macos-15), but became an optional download starting with Xcode 26.
+        # `xcodebuild -downloadComponent` does not exist on Xcode 16 and errors
+        # with "invalid option '-downloadComponent'", so only invoke it when
+        # `metal` is actually missing from the active Xcode toolchain.
+        run: |
+          if xcrun --find metal >/dev/null 2>&1; then
+            echo "Metal toolchain already available: $(xcrun --find metal)"
+          else
+            echo "Metal toolchain missing; downloading via xcodebuild..."
+            xcodebuild -downloadComponent MetalToolchain
+          fi
 
       - name: Run test suite
         run: swift test
