@@ -19,6 +19,13 @@ struct BuildMetalShaders: BuildToolPlugin {
         let tool = try context.tool(named: "MetalShaderCompiler")
         let outputFileURL = context.pluginWorkDirectoryURL.appendingPathComponent(
             "VoxelShaders.metallib")
+        // The Metal compiler's clang frontend writes its module cache to the
+        // system cache directory by default, which the SwiftPM build-plugin
+        // sandbox blocks with "Operation not permitted". Redirect it into the
+        // plugin work directory (a sandbox-allowed path) so `metal` can build
+        // the metal_stdlib/metal_types modules during CI and local builds.
+        let moduleCacheURL = context.pluginWorkDirectoryURL.appendingPathComponent(
+            "ModuleCache")
 
         return [
             .buildCommand(
@@ -27,6 +34,7 @@ struct BuildMetalShaders: BuildToolPlugin {
                 arguments: [
                     shaderSourceURL.path,
                     outputFileURL.path,
+                    moduleCacheURL.path,
                 ],
                 inputFiles: [shaderSourceURL],
                 outputFiles: [outputFileURL])

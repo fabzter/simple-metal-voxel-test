@@ -4,16 +4,20 @@ import Foundation
 struct MetalShaderCompiler {
     static func main() throws {
         let arguments = CommandLine.arguments
-        guard arguments.count == 3 else {
+        guard arguments.count == 4 else {
             throw CompilerError.invalidArguments
         }
 
         let inputPath = arguments[1]
         let outputURL = URL(fileURLWithPath: arguments[2], isDirectory: false)
+        let moduleCachePath = arguments[3]
         let fileManager = FileManager.default
 
         try fileManager.createDirectory(
             at: outputURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true)
+        try fileManager.createDirectory(
+            at: URL(fileURLWithPath: moduleCachePath, isDirectory: true),
             withIntermediateDirectories: true)
 
         // Compile in two stages to match the standard Metal toolchain flow:
@@ -28,7 +32,9 @@ struct MetalShaderCompiler {
 
         try run(
             executable: "/usr/bin/xcrun",
-            arguments: ["-sdk", "macosx", "metal", "-c", inputPath, "-o", airURL.path])
+            arguments: ["-sdk", "macosx", "metal", "-c", inputPath,
+                        "-fmodules-cache-path=" + moduleCachePath,
+                        "-o", airURL.path])
 
         try run(
             executable: "/usr/bin/xcrun",
@@ -61,7 +67,7 @@ enum CompilerError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidArguments:
-            return "Expected: MetalShaderCompiler <input.metal> <output.metallib>"
+            return "Expected: MetalShaderCompiler <input.metal> <output.metallib> <module-cache-dir>"
         case .commandFailed(let message):
             return message
         }
