@@ -1,20 +1,42 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
+  # Run CI only when a PR is merged into main, not on direct pushes or on
+  # PR open/synchronize. A merge is surfaced as the `pull_request` `closed`
+  # event with `merged == true`; the job-level `if` below skips non-merge
+  # closes. For a merged PR, GITHUB_REF is refs/heads/main and GITHUB_SHA is
+  # the merge commit, so checkout validates the post-merge state of main.
+  # NOTE: direct pushes to main get NO CI coverage under this trigger, so a
+  # PR-based workflow (ideally with branch protection) is required.
   pull_request:
+    branches: [main]
+    types: [closed]
+
+concurrency:
+  # Group by ref so rapid sequential merges to main cancel superseded runs.
+  # Safe to cancel: this repo has no deploy/release step on main, so we
+  # always just want the latest green run.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-and-test:
+    # Only run for merges, not for PRs closed without merging.
+    if: github.event.pull_request.merged == true
     runs-on: macos-15
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Select installed Xcode
-        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+      - name: Select Xcode 16.4
+        # Pin a specific Xcode for reproducible SDK/Swift/Metal-toolchain
+        # behavior instead of following GitHub's default /Applications/Xcode.app
+        # symlink (which can change). 16.4 ships Swift 6.1, matching
+        # .swift-version and Package.swift's swift-tools-version.
+        uses: maxim-lobanov/setup-xcode@v1.7.0
+        with:
+          xcode-version: '16.4'
 
       - name: Ensure Metal toolchain is available
         # The Metal toolchain is bundled with Xcode 16.x (the default on
