@@ -28,7 +28,7 @@ struct MaterialAtlas {
 
     let texture: MTLTexture
 
-    init(device: MTLDevice) throws {
+    init(device: MTLDevice, commandQueue: MTLCommandQueue) throws {
         let atlasSize = 16
         let bytesPerPixel = 4
         let bytesPerRow = atlasSize * bytesPerPixel
@@ -57,7 +57,7 @@ struct MaterialAtlas {
             pixelFormat: .rgba8Unorm,
             width: atlasSize,
             height: atlasSize,
-            mipmapped: false)
+            mipmapped: true)
         descriptor.usage = .shaderRead
 
         guard let texture = device.makeTexture(descriptor: descriptor) else {
@@ -69,6 +69,25 @@ struct MaterialAtlas {
             mipmapLevel: 0,
             withBytes: pixels,
             bytesPerRow: bytesPerRow)
+
+        // The atlas is intentionally tiny and high-contrast, which makes distant surfaces prone to
+        // shimmer if we only ever sample mip level 0. Generate the mip chain once at startup so
+        // the shader can use trilinear minification without per-frame work.
+        guard
+            let commandBuffer = commandQueue.makeCommandBuffer(),
+            let blitEncoder = commandBuffer.makeBlitCommandEncoder()
+        else {
+            throw RendererSetupError.materialAtlasUnavailable
+        }
+
+        blitEncoder.generateMipmaps(for: texture)
+        blitEncoder.endEncoding()
+        commandBuffer.commit()
+        commandBuffer.waitUntilCompleted()
+
+        if commandBuffer.status == .error {
+            throw RendererSetupError.materialAtlasUnavailable
+        }
 
         self.texture = texture
     }

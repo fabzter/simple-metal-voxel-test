@@ -20,6 +20,10 @@ final class MinimapView: NSView {
         false
     }
 
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        nil
+    }
+
     func update(snapshot: MinimapSnapshot) {
         self.snapshot = snapshot
         needsDisplay = true

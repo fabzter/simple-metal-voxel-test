@@ -25,8 +25,8 @@ final class DebugHUDView: NSVisualEffectView {
 
         secondaryLabel.font = .systemFont(ofSize: 11, weight: .regular)
         secondaryLabel.textColor = NSColor.white.withAlphaComponent(0.72)
-        secondaryLabel.lineBreakMode = .byTruncatingTail
-        secondaryLabel.maximumNumberOfLines = 1
+        secondaryLabel.lineBreakMode = .byWordWrapping
+        secondaryLabel.maximumNumberOfLines = 2
 
         stack.orientation = .vertical
         stack.alignment = .leading
@@ -36,7 +36,7 @@ final class DebugHUDView: NSVisualEffectView {
         addSubview(stack)
 
         NSLayoutConstraint.activate([
-            widthAnchor.constraint(lessThanOrEqualToConstant: 360),
+            widthAnchor.constraint(lessThanOrEqualToConstant: 420),
             stack.topAnchor.constraint(equalTo: topAnchor, constant: 10),
             stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
             stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
@@ -48,8 +48,12 @@ final class DebugHUDView: NSVisualEffectView {
         fatalError("init(coder:) has not been implemented")
     }
 
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        nil
+    }
+
     func update(snapshot: DebugHUDSnapshot) {
-        primaryLabel.stringValue = "Place  \(snapshot.selectedPlacementMaterial)"
+        primaryLabel.stringValue = "Block  \(snapshot.selectedPlacementMaterial)  ·  Keys 1–5"
 
         var secondaryParts: [String] = []
         if let targetMaterial = snapshot.targetMaterial {
@@ -61,6 +65,9 @@ final class DebugHUDView: NSVisualEffectView {
                 targetSummary += " · \(format(distance))m"
             }
             secondaryParts.append(targetSummary)
+            secondaryParts.append("Left click removes · Right click places")
+        } else {
+            secondaryParts.append("Aim at a block · Left click removes · Right click places")
         }
 
         var modeParts: [String] = []

@@ -11,6 +11,7 @@ final class GameInputController {
         static let w: UInt16 = 13
         static let space: UInt16 = 49
         static let tab: UInt16 = 48
+        static let f: UInt16 = 3
     }
 
     private var playerInput = PlayerInput()
@@ -20,6 +21,8 @@ final class GameInputController {
     private var pendingPanelToggle = false
     private var pendingHUDToggle = false
     private var pendingBlockMaterialSelection: BlockMaterialType?
+    private var pendingEscape = false
+    private var pendingFlyToggle = false
 
     var currentInput: PlayerInput {
         playerInput
@@ -30,6 +33,12 @@ final class GameInputController {
         case .keyDown:
             if event.keyCode == KeyCode.tab {
                 pendingPanelToggle = true
+            }
+            if event.keyCode == 53 {  // Esc — always available, even with inspector open
+                pendingEscape = true
+            }
+            if event.keyCode == KeyCode.f {
+                pendingFlyToggle = true
             }
             if event.specialKey == .f1 {
                 pendingHUDToggle = true
@@ -56,6 +65,12 @@ final class GameInputController {
         case .rightMouseDown:
             if gameplayInputEnabled {
                 pendingEditActions.append(.place)
+            }
+        case .flagsChanged:
+            if gameplayInputEnabled {
+                let shiftDown = event.modifierFlags.contains(.shift)
+                playerInput.sprint = shiftDown
+                playerInput.descend = shiftDown  // Shift = sprint on ground, descend in air
             }
         default:
             break
@@ -92,8 +107,20 @@ final class GameInputController {
         return pendingBlockMaterialSelection
     }
 
+    func consumeEscape() -> Bool {
+        defer { pendingEscape = false }
+        return pendingEscape
+    }
+
+    func consumeFlyToggle() -> Bool {
+        defer { pendingFlyToggle = false }
+        return pendingFlyToggle
+    }
+
     func cancelGameplayInput() {
         playerInput = PlayerInput()
+        playerInput.sprint = false
+        playerInput.descend = false
         pendingLookDelta = .zero
         pendingEditActions.removeAll(keepingCapacity: true)
     }

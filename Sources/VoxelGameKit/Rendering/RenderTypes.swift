@@ -15,6 +15,7 @@ struct Uniforms {
     let lodTintOverlayMode: Float
     let lodTintColor: SIMD4<Float>
     let highlightColor: SIMD4<Float>
+    let fadeThreshold: Float  // 1.0 = fully drawn; < 1.0 = dither threshold for LOD crossfade
 }
 
 enum MaterialMode: Float {

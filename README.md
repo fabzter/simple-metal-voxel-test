@@ -37,7 +37,23 @@ Or use the helper script:
 | M | Toggle material debug mode |
 | F1 | Toggle HUD |
 | 1-5 | Select block type (`1` Grass, `2` Dirt, `3` Stone, `4` Moss, `5` Snow) |
-| Esc | Quit |
+| Esc | Release mouse / close inspector (quit with Cmd+Q or menu) |
+| Shift | Sprint (hold) |
+| F | Toggle fly mode (Space up, Shift down; also Game ▸ Toggle Fly Mode ⌥⌘F) |
+
+The **File** menu manages worlds: **New World** (⌘N, random seed), **New World from
+Seed…** (⇧⌘N — type a number or any phrase), **Open World…** (⌘O), **Open Recent**,
+**Revert to Saved**, **Save World** (⌘S), **Save World As…** (⇧⌘S), and **Reset
+World…** (asks first and keeps the current seed).  The world also auto-saves when you
+quit, so block edits and your position survive across sessions, and the window title
+shows the active seed.
+
+The **Game** menu has **Toggle Fly Mode** (⌥⌘F, checkmark shows the current state),
+**Copy World Seed** (⇧⌘C — puts the seed on the clipboard for sharing), and a **Sound
+Effects** toggle.  Block place/break sounds and the ambient wind are synthesized in
+code at launch — like the texture atlas, the project ships zero binary assets.
+The **Debug Inspector** (Tab) includes sliders for **mouse sensitivity** and
+**field of view** — both are saved between launches.
 
 ## Architecture overview
 
@@ -62,3 +78,12 @@ Or use the helper script:
 ```bash
 swift test
 ```
+
+## Further reading
+
+- [Hunting Sky-Holes: Debugging Mixed-Resolution Voxel LOD Seams on Metal](docs/mixed-lod-seam-debugging.md)
+  — an engineering case study on the diagnostic tooling and the ten root causes behind
+  the LOD seam "see-through" glitch, including the false diagnoses along the way.
+- [LOD-Seam Diagnostics Instrumentation](docs/diagnostics-instrumentation.md)
+  — an archive of the debug diagnostics subsystem that was removed after the seam fix:
+  what it did, where it hooked in, and how to bring it back for a future LOD regression.

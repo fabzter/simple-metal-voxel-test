@@ -20,6 +20,10 @@ final class CrosshairView: NSView {
         false
     }
 
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        nil
+    }
+
     func update(hasTarget: Bool, editFeedback: EditFeedback?) {
         guard
             self.hasTarget != hasTarget

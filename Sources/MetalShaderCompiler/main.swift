@@ -30,15 +30,16 @@ struct MetalShaderCompiler {
             try? fileManager.removeItem(at: airURL)
         }
 
-        try run(
-            executable: "/usr/bin/xcrun",
-            arguments: ["-sdk", "macosx", "metal", "-c", inputPath,
-                        "-fmodules-cache-path=" + moduleCachePath,
-                        "-o", airURL.path])
+        let metalExecutable = try resolveTool(named: "metal")
+        let metallibExecutable = try resolveTool(named: "metallib")
 
         try run(
-            executable: "/usr/bin/xcrun",
-            arguments: ["-sdk", "macosx", "metallib", airURL.path, "-o", metallibURL.path])
+            executable: metalExecutable,
+            arguments: ["-c", inputPath, "-o", airURL.path])
+
+        try run(
+            executable: metallibExecutable,
+            arguments: [airURL.path, "-o", metallibURL.path])
     }
 
     private static func run(executable: String, arguments: [String]) throws {
@@ -57,6 +58,39 @@ struct MetalShaderCompiler {
             let message = String(data: errorData, encoding: .utf8) ?? "Unknown tool failure"
             throw CompilerError.commandFailed(message)
         }
+    }
+
+    private static func resolveTool(named tool: String) throws -> String {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
+        process.arguments = ["-sdk", "macosx", "-find", tool]
+
+        let stdout = Pipe()
+        let stderr = Pipe()
+        process.standardOutput = stdout
+        process.standardError = stderr
+
+        try process.run()
+        process.waitUntilExit()
+
+        guard process.terminationStatus == 0 else {
+            let errorData = stderr.fileHandleForReading.readDataToEndOfFile()
+            let message =
+                String(data: errorData, encoding: .utf8) ?? "Unknown tool resolution failure"
+            throw CompilerError.commandFailed(message)
+        }
+
+        let outputData = stdout.fileHandleForReading.readDataToEndOfFile()
+        guard
+            let output = String(data: outputData, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+            !output.isEmpty
+        else {
+            throw CompilerError.commandFailed(
+                "xcrun -sdk macosx -find \(tool) returned an empty path.")
+        }
+
+        return output
     }
 }
 

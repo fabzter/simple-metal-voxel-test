@@ -24,6 +24,7 @@ struct Uniforms {
     float lodTintOverlayMode;
     float4 lodTintColor;
     float4 highlightColor;
+    float fadeThreshold;        // 1.0 = fully drawn; < 1.0 = dither threshold
 };
 
 vertex VertexOut vertex_main(VertexIn in [[stage_in]],
@@ -43,7 +44,26 @@ vertex VertexOut vertex_main(VertexIn in [[stage_in]],
 fragment float4 fragment_main(VertexOut in [[stage_in]],
                               constant Uniforms& uniforms [[buffer(1)]],
                               texture2d<half> materialAtlas [[texture(0)]]) {
-    constexpr sampler atlasSampler(address::clamp_to_edge, min_filter::nearest, mag_filter::nearest);
+    // Screen-door dither for LOD crossfade. fadeThreshold = 1.0 means fully drawn;
+    // values < 1.0 select a fraction of pixels via a 4x4 Bayer ordered dither matrix.
+    // Old and new meshes draw together with complementary thresholds so they interleave
+    // per pixel without blending — depth writes work correctly on both.
+    if (uniforms.fadeThreshold < 1.0) {
+        constexpr float bayer[16] = {  0.0/16,  8.0/16,  2.0/16, 10.0/16,
+                                      12.0/16,  4.0/16, 14.0/16,  6.0/16,
+                                       3.0/16, 11.0/16,  1.0/16,  9.0/16,
+                                      15.0/16,  7.0/16, 13.0/16,  5.0/16 };
+        uint2 pixel = uint2(in.position.xy) % 4;
+        if (bayer[pixel.y * 4 + pixel.x] >= uniforms.fadeThreshold) {
+            discard_fragment();
+        }
+    }
+
+    constexpr sampler atlasSampler(
+        address::clamp_to_edge,
+        min_filter::linear,
+        mag_filter::nearest,
+        mip_filter::linear);
     const bool usesTextureMaterial = in.materialMode > 0.5;
     const bool texturesOnly = uniforms.materialDebugMode > 1.5;
     const bool flatColorsOnly = uniforms.materialDebugMode > 0.5 && uniforms.materialDebugMode <= 1.5;

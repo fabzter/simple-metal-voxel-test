@@ -10,6 +10,7 @@ public enum RendererSetupError: LocalizedError {
     case shaderLibraryUnavailable(Error)
     case pipelineStateUnavailable(Error)
     case depthStateUnavailable
+    case invalidLODConfiguration(String)
 
     public var errorDescription: String? {
         switch self {
@@ -27,6 +28,8 @@ public enum RendererSetupError: LocalizedError {
             return "Failed to create the Metal render pipeline: \(error.localizedDescription)"
         case .depthStateUnavailable:
             return "Failed to create the Metal depth state."
+        case .invalidLODConfiguration(let message):
+            return "Invalid LOD configuration: \(message)"
         }
     }
 }

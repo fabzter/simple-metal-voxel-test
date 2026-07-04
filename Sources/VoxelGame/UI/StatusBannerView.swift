@@ -38,6 +38,10 @@ final class StatusBannerView: NSVisualEffectView {
         fatalError("init(coder:) has not been implemented")
     }
 
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        nil
+    }
+
     func show(message: String, duration: TimeInterval = 1.6) {
         hideWorkItem?.cancel()
         label.stringValue = message

@@ -6,11 +6,12 @@ public final class PlayerController {
     public let moveSpeed: Float
     public let playerHeight: Float
     public let playerRadius: Float
-    public let cameraConfiguration: CameraConfiguration
+    public var cameraConfiguration: CameraConfiguration
 
     public private(set) var position: SIMD3<Float>
     public private(set) var velocity: SIMD3<Float>
     public private(set) var isGrounded: Bool
+    public private(set) var isFlying: Bool
     public private(set) var cameraYaw: Float
     public private(set) var cameraPitch: Float
 
@@ -27,6 +28,7 @@ public final class PlayerController {
         isGrounded: Bool = false,
         cameraYaw: Float = 0.0,
         cameraPitch: Float = -0.2,
+        isFlying: Bool = false,
         gravity: Float = -25.0,
         jumpSpeed: Float = 9.0,
         moveSpeed: Float = 6.0,
@@ -45,6 +47,7 @@ public final class PlayerController {
         self.playerHeight = playerHeight
         self.playerRadius = playerRadius
         self.cameraConfiguration = cameraConfiguration
+        self.isFlying = isFlying
     }
 
     public func rotateCamera(deltaX: Float, deltaY: Float) {
@@ -55,7 +58,50 @@ public final class PlayerController {
             cameraConfiguration.maximumPitch)
     }
 
+    public func toggleFlying() {
+        isFlying.toggle()
+        velocity.y = 0  // No residual plummet on enable, natural fall on disable
+    }
+
     public func update(dt: Float, input: PlayerInput, in world: VoxelWorld) {
+        if isFlying {
+            let flySpeed = moveSpeed * 2.5
+            var wishVelocity = SIMD3<Float>(0, 0, 0)
+            let forward = SIMD3<Float>(sin(cameraYaw), 0, -cos(cameraYaw))
+            let right = SIMD3<Float>(cos(cameraYaw), 0, sin(cameraYaw))
+
+            if input.moveForward { wishVelocity += forward }
+            if input.moveBackward { wishVelocity -= forward }
+            if input.moveLeft { wishVelocity -= right }
+            if input.moveRight { wishVelocity += right }
+            if length(wishVelocity) > 0 { wishVelocity = normalize(wishVelocity) * flySpeed }
+
+            velocity.x = wishVelocity.x
+            velocity.z = wishVelocity.z
+            velocity.y = input.jump ? flySpeed : (input.descend ? -flySpeed : 0)
+
+            // Same per-axis collide-and-cancel as walking; blocks still stop the player while flying.
+            var nextPosition = position
+            nextPosition.x += velocity.x * dt
+            if collides(at: nextPosition, in: world) {
+                nextPosition.x = position.x
+                velocity.x = 0
+            }
+            nextPosition.z += velocity.z * dt
+            if collides(at: nextPosition, in: world) {
+                nextPosition.z = position.z
+                velocity.z = 0
+            }
+            nextPosition.y += velocity.y * dt
+            if collides(at: nextPosition, in: world) {
+                nextPosition.y = position.y
+                velocity.y = 0
+            }
+            position = nextPosition
+            isGrounded = false
+            return
+        }
+
         if !isGrounded {
             velocity.y += gravity * dt
         }
@@ -70,7 +116,7 @@ public final class PlayerController {
         if input.moveRight { inputVelocity += right }
 
         if length(inputVelocity) > 0 {
-            inputVelocity = normalize(inputVelocity) * moveSpeed
+            inputVelocity = normalize(inputVelocity) * (moveSpeed * (input.sprint ? 1.6 : 1.0))
         }
 
         velocity.x = inputVelocity.x

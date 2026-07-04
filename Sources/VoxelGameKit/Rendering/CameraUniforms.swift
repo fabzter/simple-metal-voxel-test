@@ -26,7 +26,8 @@ struct CameraUniforms {
         materialDebugMode: MaterialDebugMode,
         lodTintOverlayMode: LODTintOverlayMode,
         lodTintColor: SIMD4<Float>,
-        highlightColor: SIMD4<Float>
+        highlightColor: SIMD4<Float>,
+        fadeThreshold: Float
     ) -> Uniforms {
         Uniforms(
             projection: projection,
@@ -34,6 +35,7 @@ struct CameraUniforms {
             materialDebugMode: materialDebugMode.rawValue,
             lodTintOverlayMode: lodTintOverlayMode == .off ? 0 : 1,
             lodTintColor: lodTintColor,
-            highlightColor: highlightColor)
+            highlightColor: highlightColor,
+            fadeThreshold: fadeThreshold)
     }
 }

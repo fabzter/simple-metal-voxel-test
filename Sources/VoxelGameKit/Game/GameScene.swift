@@ -25,6 +25,14 @@ public final class GameScene {
         self.currentTarget = raycaster.raycast(camera: resolvedPlayer.camera, in: world)
     }
 
+    /// Builds a scene from an already-constructed world (e.g. restored from a save).
+    public init(world: VoxelWorld, player: PlayerController? = nil) {
+        self.world = world
+        let resolvedPlayer = player ?? Self.makeDefaultPlayer(for: world)
+        self.player = resolvedPlayer
+        self.currentTarget = raycaster.raycast(camera: resolvedPlayer.camera, in: world)
+    }
+
     public func update(
         dt: Float,
         input: PlayerInput,

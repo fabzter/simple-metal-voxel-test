@@ -22,6 +22,19 @@ struct GameInputControllerTests {
 
     @MainActor
     @Test
+    func escapeIsConsumedEvenWhenGameplayInputIsDisabled() throws {
+        let controller = GameInputController()
+        let event = try makeKeyDownEvent(
+            characters: "", charactersIgnoringModifiers: "", keyCode: 53)
+
+        controller.handle(event, gameplayInputEnabled: false)
+
+        #expect(controller.consumeEscape())
+        #expect(!controller.consumeEscape())
+    }
+
+    @MainActor
+    @Test
     func digitShortcutSelectsMatchingBlockMaterial() throws {
         let controller = GameInputController()
         let event = try makeKeyDownEvent(

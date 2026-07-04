@@ -6,8 +6,8 @@ public final class VoxelWorld {
 
     public let gridSize: Int
     public let chunkSize: Int
-    public let generation: Generation
-    public private(set) var solidGrid: [Bool]
+    public private(set) var generation: Generation
+    public private(set) var solidGrid: BitGrid
     public private(set) var meshRevision: UInt64 = 0
 
     private let mesher = VoxelMesher()
@@ -23,7 +23,7 @@ public final class VoxelWorld {
         self.gridSize = gridSize
         self.chunkSize = chunkSize
         self.generation = generation
-        self.solidGrid = Array(repeating: false, count: gridSize * gridSize * gridSize)
+        self.solidGrid = BitGrid(count: gridSize * gridSize * gridSize)
         self.chunkIndices = Self.makeChunkIndices(gridSize: gridSize, chunkSize: chunkSize)
         self.chunkRevisions = Dictionary(uniqueKeysWithValues: chunkIndices.map { ($0, 0) })
 
@@ -48,6 +48,37 @@ public final class VoxelWorld {
         }
 
         return solidGrid[index(x: x, y: y, z: z)]
+    }
+
+    /// Returns the current solid grid words and explicit materials for serialization.
+    public func makeSaveSnapshot() -> (words: [UInt64], materials: [Int: BlockMaterialType]) {
+        (solidGrid.words, explicitMaterials)
+    }
+
+    /// Restores a world from saved grid data.  Returns `nil` when the word count or
+    /// trailing bits are invalid.  The world starts empty and the grid is injected
+    /// directly, so chunks are revision-zero and the renderer seeds its revision map
+    /// from them.
+    ///
+    /// `generation` is set to `.terrain(seed)` afterwards as *provenance*: it records
+    /// which seed originally built this terrain so the HUD/inspector, re-save, and
+    /// Reset World keep the right seed.  The restored grid — not the generator —
+    /// defines the current content.
+    public static func restored(
+        gridSize: Int,
+        chunkSize: Int,
+        seed: UInt64,
+        words: [UInt64],
+        materials: [Int: BlockMaterialType]
+    ) -> VoxelWorld? {
+        guard let restoredGrid = BitGrid(count: gridSize * gridSize * gridSize, words: words) else {
+            return nil
+        }
+        let world = VoxelWorld(gridSize: gridSize, chunkSize: chunkSize, generation: .empty)
+        world.solidGrid = restoredGrid
+        world.explicitMaterials = materials
+        world.generation = .terrain(VoxelWorldConfiguration(seed: seed))
+        return world
     }
 
     public func setSolid(_ isSolid: Bool, x: Int, y: Int, z: Int) {
@@ -122,11 +153,25 @@ public final class VoxelWorld {
     }
 
     func buildMesh() -> [Vertex] {
-        chunkIndices.flatMap { makeWorldMesh(for: $0, voxelStride: 1).vertices }
+        chunkIndices.flatMap {
+            makeWorldMesh(for: $0, voxelStride: 1, seamConfiguration: .none).vertices
+        }
     }
 
     func makeWorldMesh(for chunkIndex: VoxelChunkIndex, voxelStride: Int) -> WorldMesh {
-        mesher.makeWorldMesh(for: self, chunkIndex: chunkIndex, voxelStride: voxelStride)
+        makeWorldMesh(for: chunkIndex, voxelStride: voxelStride, seamConfiguration: .none)
+    }
+
+    func makeWorldMesh(
+        for chunkIndex: VoxelChunkIndex,
+        voxelStride: Int,
+        seamConfiguration: ChunkSeamConfiguration
+    ) -> WorldMesh {
+        mesher.makeWorldMesh(
+            for: self,
+            chunkIndex: chunkIndex,
+            voxelStride: voxelStride,
+            seamConfiguration: seamConfiguration)
     }
 
     public func topSolidY(inColumnX x: Int, z: Int, withinYRange yRange: ClosedRange<Int>) -> Int? {
