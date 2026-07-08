@@ -243,12 +243,16 @@ the configuration layer.
 
 ## Appendix: source map
 
-- `Sources/VoxelGameKit/World/VoxelMesher.swift` — seam stitching, transition boundary
+- `Sources/VoxelEngine/World/VoxelMesher.swift` — seam stitching, transition boundary
   faces, occupied-height faces, terrain-surface emission.
-- `Sources/VoxelGameKit/Rendering/LODConfiguration.swift` — LOD chain and
+- `Sources/VoxelEngine/Rendering/LODConfiguration.swift` — LOD chain and
   `validateStrideChain()`.
-- `Sources/VoxelGameKit/Rendering/Renderer.swift` — seam configuration, ray/seam
+- `Sources/VoxelEngine/Rendering/Renderer.swift` — seam configuration, ray/seam
   intersections, CPU raymarch diagnostics.
-- `Sources/VoxelGameKit/Rendering/RendererDiagnostics.swift` — diagnostic snapshot types.
-- `Sources/VoxelGame/UI/LODSeamDiagnosticsRecorder.swift` — JSON + screenshot capture.
-- `Tests/VoxelGameKitTests/VoxelMesherTests.swift` — seam and LOD regression tests.
+- `Sources/VoxelEngine/Rendering/RendererDiagnostics.swift` — diagnostic snapshot types
+  (removed after the fix; path from before the engine/demo split was
+  `Sources/VoxelGameKit/…`).
+- `Sources/VoxelDemo/UI/LODSeamDiagnosticsRecorder.swift` — JSON + screenshot capture
+  (removed after the fix; path from before the engine/demo split was
+  `Sources/VoxelGame/…`).
+- `Tests/VoxelEngineTests/VoxelMesherTests.swift` — seam and LOD regression tests.

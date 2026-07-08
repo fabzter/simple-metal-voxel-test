@@ -1,4 +1,4 @@
 #!/bin/sh
 set -eu
 
-swift run -c release VoxelGame
+swift run -c release VoxelDemo

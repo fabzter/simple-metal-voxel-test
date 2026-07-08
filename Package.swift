@@ -2,29 +2,45 @@
 
 import PackageDescription
 
-// Package layout:
-// - VoxelGame: thin AppKit executable target.
-// - VoxelGameKit: reusable gameplay, world, and rendering code.
-// - MetalShaderCompiler + BuildMetalShaders: build-time `.metal` -> `.metallib` pipeline.
+// Package layout — the engine is the product, the demo is the showcase:
+// - VoxelEngine: the reusable voxel engine library (world, meshing, rendering,
+//   player physics, persistence). This is the main product of the repository.
+//   It never depends on the demo.
+// - VoxelDemo: a small AppKit game built ON TOP of VoxelEngine to demonstrate
+//   it end to end (windowing, input mapping, HUD/UI, sounds, save UX).
+// - MetalShaderCompiler + BuildMetalShaders: build-time `.metal` -> `.metallib`
+//   pipeline used by the engine target.
 let package = Package(
-    name: "VoxelGame",
+    name: "VoxelEngine",
     platforms: [
         .macOS(.v13)
     ],
     products: [
+        // The engine library is the primary product of this repo.
         .library(
-            name: "VoxelGameKit",
-            targets: ["VoxelGameKit"]
+            name: "VoxelEngine",
+            targets: ["VoxelEngine"]
         ),
+        // The demo game executable showcases the engine.
         .executable(
-            name: "VoxelGame",
-            targets: ["VoxelGame"]
+            name: "VoxelDemo",
+            targets: ["VoxelDemo"]
         ),
     ],
     targets: [
+        // MARK: Engine (main product)
+        .target(
+            name: "VoxelEngine",
+            exclude: ["Shaders"],
+            plugins: [
+                .plugin(name: "BuildMetalShaders")
+            ]
+        ),
+
+        // MARK: Demo game (depends on the engine, never the reverse)
         .executableTarget(
-            name: "VoxelGame",
-            dependencies: ["VoxelGameKit"],
+            name: "VoxelDemo",
+            dependencies: ["VoxelEngine"],
             linkerSettings: [
                 .linkedFramework("Cocoa"),
                 .linkedFramework("CoreGraphics"),
@@ -32,13 +48,8 @@ let package = Package(
                 .linkedFramework("QuartzCore"),
             ]
         ),
-        .target(
-            name: "VoxelGameKit",
-            exclude: ["Shaders"],
-            plugins: [
-                .plugin(name: "BuildMetalShaders")
-            ]
-        ),
+
+        // MARK: Build tooling
         .executableTarget(
             name: "MetalShaderCompiler"
         ),
@@ -47,13 +58,15 @@ let package = Package(
             capability: .buildTool(),
             dependencies: ["MetalShaderCompiler"]
         ),
+
+        // MARK: Tests
         .testTarget(
-            name: "VoxelGameKitTests",
-            dependencies: ["VoxelGameKit"]
+            name: "VoxelEngineTests",
+            dependencies: ["VoxelEngine"]
         ),
         .testTarget(
-            name: "VoxelGameTests",
-            dependencies: ["VoxelGame"]
+            name: "VoxelDemoTests",
+            dependencies: ["VoxelDemo"]
         ),
     ]
 )

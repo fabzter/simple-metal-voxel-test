@@ -2,6 +2,11 @@
 
 *Companion to [Hunting Sky-Holes](mixed-lod-seam-debugging.md).*
 
+> **Note (engine/demo split):** all paths in this archive predate the repository's
+> split into `VoxelEngine` (formerly `VoxelGameKit`) and `VoxelDemo` (formerly
+> `VoxelGame`). To resurrect any piece, map `Sources/VoxelGameKit/…` →
+> `Sources/VoxelEngine/…` and `Sources/VoxelGame/…` → `Sources/VoxelDemo/…`.
+
 ## Why this document exists
 
 During the mixed-LOD "see-through" bug hunt (documented in the research paper above)

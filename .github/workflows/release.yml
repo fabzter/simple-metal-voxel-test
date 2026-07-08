@@ -43,18 +43,18 @@ jobs:
         run: swift build -c release
 
       - name: Package release binary
-        # Zip the whole .build/release/ dir so the VoxelGameKit resource
+        # Zip the whole .build/release/ dir so the VoxelEngine resource
         # bundle (VoxelShaders.metallib, loaded via Bundle.module) travels
         # next to the executable. Apple Silicon only (macos-15-arm64).
         run: |
           cd .build/release
-          zip -r "$GITHUB_WORKSPACE/VoxelGame-macos-arm64-${GITHUB_REF_NAME}.zip" .
+          zip -r "$GITHUB_WORKSPACE/VoxelDemo-macos-arm64-${GITHUB_REF_NAME}.zip" .
 
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release create "${GITHUB_REF_NAME}" \
-            "VoxelGame-macos-arm64-${GITHUB_REF_NAME}.zip" \
+            "VoxelDemo-macos-arm64-${GITHUB_REF_NAME}.zip" \
             --title "${GITHUB_REF_NAME}" \
             --generate-notes

@@ -58,14 +58,14 @@ jobs:
       - name: Build release executable
         run: swift build -c release
 
-      - name: Upload VoxelGame build
+      - name: Upload VoxelDemo build
         # The shader is loaded via Bundle.module, so the runnable artifact is
-        # the executable PLUS the VoxelGameKit resource bundle (containing
+        # the executable PLUS the VoxelEngine resource bundle (containing
         # VoxelShaders.metallib) that sits next to it. Upload the whole
         # .build/release/ dir so the bundle is always included regardless of
         # SwiftPM's exact bundle naming. Apple Silicon only (macos-15-arm64).
         uses: actions/upload-artifact@v7.0.1
         with:
-          name: VoxelGame-macos-arm64-${{ github.sha }}
+          name: VoxelDemo-macos-arm64-${{ github.sha }}
           path: .build/release/
           if-no-files-found: error
