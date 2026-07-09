@@ -17,6 +17,8 @@ enum SoundSynthesis {
  static let windRawDuration = 4.0
  static let windLoopCrossfade = 0.25
  static var windLoopDuration: Double { windRawDuration - windLoopCrossfade }
+ static let footstepDuration = 0.06
+ static let landingDuration = 0.13
 
  /// Deterministic pseudo-random stream (linear congruential) so tests can assert
  /// exact behavior and variants stay stable across launches.
@@ -114,6 +116,52 @@ enum SoundSynthesis {
   }
   return looped
  }
+
+ /// Footstep: a soft muffled crunch — a lowpassed noise burst with a fast decay plus a
+ /// faint low thump, so walking feels grounded without becoming distracting. Variants
+ /// nudge the timbre so repeated steps don't sound identical.
+ static func footstepSamples(sampleRate: Double, variant: Int) -> [Float] {
+  let count = Int(footstepDuration * sampleRate)
+  var noise = SeededNoise(state: UInt64(0x0F00_75E9 + variant * 6151))
+  var output = [Float](repeating: 0, count: count)
+  var filtered: Float = 0
+  let cutoff = 700.0 + Double(variant % 3) * 120.0
+  let k = Float(1 - exp(-2.0 * .pi * cutoff / sampleRate))
+  let thumpFrequency = 95.0 - Double(variant % 3) * 8.0
+  var phase = 0.0
+
+  for i in 0..<count {
+   let t = Double(i) / sampleRate
+   let envelope = Float(exp(-t / 0.018))
+   filtered += k * (noise.next() - filtered)
+   phase += 2.0 * .pi * thumpFrequency / sampleRate
+   let thump = Float(sin(phase)) * Float(exp(-t / 0.028)) * 0.4
+   output[i] = (filtered * 0.7 + thump) * envelope * 0.6
+  }
+  return output
+ }
+
+ /// Landing: a heavier thud when the player hits the ground after a fall — a low sine
+ /// that dips in pitch, with a noisy attack and a longer body than a footstep.
+ static func landingSamples(sampleRate: Double) -> [Float] {
+  let count = Int(landingDuration * sampleRate)
+  var noise = SeededNoise(state: 0x1A2D_3B4C)
+  var output = [Float](repeating: 0, count: count)
+  var filtered: Float = 0
+  let k = Float(1 - exp(-2.0 * .pi * 500.0 / sampleRate))
+  var phase = 0.0
+
+  for i in 0..<count {
+   let t = Double(i) / sampleRate
+   let envelope = Float(exp(-t / 0.045))
+   filtered += k * (noise.next() - filtered)
+   let frequency = 70.0 - 20.0 * (t / landingDuration)
+   phase += 2.0 * .pi * frequency / sampleRate
+   let thump = Float(sin(phase)) * Float(exp(-t / 0.06))
+   output[i] = (thump * 0.8 + filtered * 0.35) * envelope * 0.85
+  }
+  return output
+ }
 }
 
 // MARK: - Engine
@@ -129,9 +177,12 @@ final class GameSoundEngine {
  private let engine = AVAudioEngine()
  private let effectPlayers = (0..<4).map { _ in AVAudioPlayerNode() }
  private let windPlayer = AVAudioPlayerNode()
+ private let footstepPlayer = AVAudioPlayerNode()
 
  private var placeBuffers: [AVAudioPCMBuffer] = []
  private var breakBuffers: [AVAudioPCMBuffer] = []
+ private var footstepBuffers: [AVAudioPCMBuffer] = []
+ private var landingBuffers: [AVAudioPCMBuffer] = []
  private var nextEffectIndex = 0
  private var isRunning = false
 
@@ -169,6 +220,9 @@ final class GameSoundEngine {
   engine.attach(windPlayer)
   engine.connect(windPlayer, to: engine.mainMixerNode, format: monoFormat)
   windPlayer.volume = 0.12
+  engine.attach(footstepPlayer)
+  engine.connect(footstepPlayer, to: engine.mainMixerNode, format: monoFormat)
+  footstepPlayer.volume = 0.5
   engine.mainMixerNode.outputVolume = isEnabled ? 1 : 0
 
   do {
@@ -188,6 +242,15 @@ final class GameSoundEngine {
     SoundSynthesis.breakSamples(sampleRate: hardwareRate, variant: $0),
     format: monoFormat)
   }
+  footstepBuffers = (0..<4).compactMap {
+   Self.makeBuffer(
+    SoundSynthesis.footstepSamples(sampleRate: hardwareRate, variant: $0),
+    format: monoFormat)
+  }
+  landingBuffers = [
+   Self.makeBuffer(
+    SoundSynthesis.landingSamples(sampleRate: hardwareRate), format: monoFormat)
+  ].compactMap { $0 }
 
   if let windBuffer = Self.makeBuffer(
    SoundSynthesis.windSamples(sampleRate: hardwareRate), format: monoFormat)
@@ -203,6 +266,21 @@ final class GameSoundEngine {
 
  func playBlockRemoved() {
   playRandomVariant(from: breakBuffers)
+ }
+
+ /// Plays a single footstep. Footsteps and landings share one dedicated node so walking
+ /// never steals a block-edit voice; steps are spaced further apart than their duration,
+ /// so scheduled buffers play back-to-back at a natural cadence.
+ func playFootstep() {
+  guard isRunning, isEnabled, let buffer = footstepBuffers.randomElement() else { return }
+  footstepPlayer.scheduleBuffer(buffer, at: nil)
+  footstepPlayer.play()
+ }
+
+ func playLanding() {
+  guard isRunning, isEnabled, let buffer = landingBuffers.randomElement() else { return }
+  footstepPlayer.scheduleBuffer(buffer, at: nil)
+  footstepPlayer.play()
  }
 
  private func playRandomVariant(from buffers: [AVAudioPCMBuffer]) {

@@ -17,6 +17,7 @@ final class MetalView: NSView {
  private let helpOverlayView: HelpOverlayView
  private let debugControlPanelView: DebugControlPanelView
  private let statusBannerView: StatusBannerView
+ private let hotbarView: HotbarView
 
  private var gameLoop: GameLoop?
  private weak var observedWindow: NSWindow?
@@ -30,6 +31,11 @@ final class MetalView: NSView {
  private var hasShownWelcomeHint = false
  private let launchedFromSave: Bool
  private let soundEngine = GameSoundEngine()
+ // Locomotion audio state: footsteps fire every fixed distance walked; a landing thud
+ // fires when the player touches down after falling.
+ private var footstepDistanceAccumulator: Float = 0
+ private var wasGroundedLastFrame = true
+ private var previousVerticalVelocity: Float = 0
 
  private var metalLayer: CAMetalLayer {
   guard let layer = layer as? CAMetalLayer else {
@@ -83,6 +89,7 @@ final class MetalView: NSView {
   let helpOverlayView = HelpOverlayView(frame: .zero)
   let debugControlPanelView = DebugControlPanelView(frame: .zero)
   let statusBannerView = StatusBannerView(frame: .zero)
+  let hotbarView = HotbarView(frame: .zero)
 
   return MetalView(
    configuredFrame: frame,
@@ -96,6 +103,7 @@ final class MetalView: NSView {
    helpOverlayView: helpOverlayView,
    debugControlPanelView: debugControlPanelView,
    statusBannerView: statusBannerView,
+   hotbarView: hotbarView,
    launchedFromSave: launchedFromSave)
  }
 
@@ -115,6 +123,7 @@ final class MetalView: NSView {
   helpOverlayView: HelpOverlayView,
   debugControlPanelView: DebugControlPanelView,
   statusBannerView: StatusBannerView,
+  hotbarView: HotbarView,
   launchedFromSave: Bool
  ) {
   self.scene = scene
@@ -127,6 +136,7 @@ final class MetalView: NSView {
   self.helpOverlayView = helpOverlayView
   self.debugControlPanelView = debugControlPanelView
   self.statusBannerView = statusBannerView
+  self.hotbarView = hotbarView
   self.launchedFromSave = launchedFromSave
 
   super.init(frame: frameRect)
@@ -208,6 +218,12 @@ final class MetalView: NSView {
   inputController.handle(event, gameplayInputEnabled: !isDebugPanelModeEnabled)
  }
 
+ override func scrollWheel(with event: NSEvent) {
+  // The AppDelegate event monitor doesn't watch scroll events, so the normal responder
+  // chain delivers them here. Route them to the input controller like every other event.
+  inputController.handle(event, gameplayInputEnabled: !isDebugPanelModeEnabled)
+ }
+
  private func configureMetalLayer() {
   metalLayer.device = device
   metalLayer.pixelFormat = .bgra8Unorm
@@ -222,10 +238,15 @@ final class MetalView: NSView {
   addSubview(helpOverlayView)
   addSubview(debugControlPanelView)
   addSubview(statusBannerView)
+  addSubview(hotbarView)
 
   NSLayoutConstraint.activate([
+   // The hotbar sits along the bottom center; the compact HUD stacks just above it.
+   hotbarView.centerXAnchor.constraint(equalTo: centerXAnchor),
+   hotbarView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -14),
+
    debugHUDView.centerXAnchor.constraint(equalTo: centerXAnchor),
-   debugHUDView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -18),
+   debugHUDView.bottomAnchor.constraint(equalTo: hotbarView.topAnchor, constant: -10),
 
    minimapView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
    minimapView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -12),
@@ -336,6 +357,10 @@ final class MetalView: NSView {
     showStatusBanner("Placed block: \(material.displayName)")
     updateOverlayViews()
    }
+   let materialCycle = inputController.consumeMaterialCycle()
+   if materialCycle != 0 {
+    cyclePlacementMaterial(by: materialCycle)
+   }
 
    if !isDebugPanelModeEnabled {
     let lookDelta = inputController.consumeLookDelta()
@@ -354,6 +379,7 @@ final class MetalView: NSView {
       soundEngine.playBlockPlaced()
      }
     }
+    updateLocomotionAudio(dt: dt)
    }
 
    do {
@@ -382,12 +408,14 @@ final class MetalView: NSView {
   debugHUDView.isHidden = !isHUDVisible
   minimapView.isHidden = !isMinimapVisible
   crosshairView.isHidden = !isCrosshairVisible
+  hotbarView.isHidden = !isHUDVisible
 
   helpOverlayView.update(mouseCaptured: isMouseCaptured)
   debugHUDView.update(snapshot: snapshot)
   minimapView.update(snapshot: MinimapSnapshot(scene: scene))
   crosshairView.update(
    hasTarget: scene.currentTarget != nil, editFeedback: scene.currentEditFeedback)
+  hotbarView.update(selected: scene.selectedPlacementMaterial)
   debugControlPanelView.update(
    materialMode: renderer.debugSettings.materialMode,
    lodTintOverlayMode: renderer.debugSettings.lodTintOverlayMode,
@@ -431,6 +459,44 @@ final class MetalView: NSView {
   setMaterialDebugMode(renderer.materialDebugMode.next())
  }
 
+ private func updateLocomotionAudio(dt: Float) {
+  let player = scene.player
+  let grounded = player.isGrounded
+  let velocity = player.velocity
+  let horizontalSpeed = (velocity.x * velocity.x + velocity.z * velocity.z).squareRoot()
+
+  if grounded && !wasGroundedLastFrame && previousVerticalVelocity < -6 {
+   // Just touched down after a real fall.
+   soundEngine.playLanding()
+   footstepDistanceAccumulator = 0
+  } else if grounded && !player.isFlying && horizontalSpeed > 0.5 {
+   // One footstep every ~2.2 world units walked; sprinting speeds the cadence
+   // naturally because the accumulator fills faster.
+   footstepDistanceAccumulator += horizontalSpeed * dt
+   if footstepDistanceAccumulator >= 2.2 {
+    footstepDistanceAccumulator -= 2.2
+    soundEngine.playFootstep()
+   }
+  } else {
+   footstepDistanceAccumulator = 0
+  }
+
+  wasGroundedLastFrame = grounded
+  previousVerticalVelocity = velocity.y
+ }
+
+ /// Moves the hotbar selection by `steps` (wrapping), for scroll-wheel cycling.
+ private func cyclePlacementMaterial(by steps: Int) {
+  let all = BlockMaterialType.allCases
+  guard let current = all.firstIndex(of: scene.selectedPlacementMaterial) else { return }
+  let count = all.count
+  let next = ((current + steps) % count + count) % count
+  let material = all[next]
+  scene.selectedPlacementMaterial = material
+  showStatusBanner("Placed block: \(material.displayName)")
+  updateOverlayViews()
+ }
+
  private var overlayViews: [NSView] {
   [
    debugHUDView,
@@ -439,6 +505,7 @@ final class MetalView: NSView {
    helpOverlayView,
    debugControlPanelView,
    statusBannerView,
+   hotbarView,
   ]
  }
 

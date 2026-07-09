@@ -4,6 +4,10 @@ public final class PlayerController {
     public let gravity: Float
     public let jumpSpeed: Float
     public let moveSpeed: Float
+    /// How quickly walking velocity eases toward the target (units: 1/second). Higher =
+    /// snappier. The easing saturates for large simulation steps, so it never changes
+    /// behavior for big `dt` values (e.g. tests) — only smooths real per-frame motion.
+    public let groundAcceleration: Float
     public let playerHeight: Float
     public let playerRadius: Float
     public var cameraConfiguration: CameraConfiguration
@@ -32,6 +36,7 @@ public final class PlayerController {
         gravity: Float = -25.0,
         jumpSpeed: Float = 9.0,
         moveSpeed: Float = 6.0,
+        groundAcceleration: Float = 12.0,
         playerHeight: Float = 1.8,
         playerRadius: Float = 0.3,
         cameraConfiguration: CameraConfiguration = .default
@@ -44,6 +49,7 @@ public final class PlayerController {
         self.gravity = gravity
         self.jumpSpeed = jumpSpeed
         self.moveSpeed = moveSpeed
+        self.groundAcceleration = groundAcceleration
         self.playerHeight = playerHeight
         self.playerRadius = playerRadius
         self.cameraConfiguration = cameraConfiguration
@@ -119,8 +125,12 @@ public final class PlayerController {
             inputVelocity = normalize(inputVelocity) * (moveSpeed * (input.sprint ? 1.6 : 1.0))
         }
 
-        velocity.x = inputVelocity.x
-        velocity.z = inputVelocity.z
+        // Ease horizontal velocity toward the target so starting and stopping feel smooth
+        // instead of instant. `min(1, ...)` saturates for large dt, keeping behavior
+        // identical for big simulation steps while smoothing real ~16 ms frames.
+        let accelerationFactor = min(1, groundAcceleration * dt)
+        velocity.x += (inputVelocity.x - velocity.x) * accelerationFactor
+        velocity.z += (inputVelocity.z - velocity.z) * accelerationFactor
 
         if input.jump && isGrounded {
             velocity.y = jumpSpeed

@@ -23,6 +23,7 @@ final class GameInputController {
     private var pendingBlockMaterialSelection: BlockMaterialType?
     private var pendingEscape = false
     private var pendingFlyToggle = false
+    private var pendingScrollSteps = 0
 
     var currentInput: PlayerInput {
         playerInput
@@ -72,6 +73,17 @@ final class GameInputController {
                 playerInput.sprint = shiftDown
                 playerInput.descend = shiftDown  // Shift = sprint on ground, descend in air
             }
+        case .scrollWheel:
+            // Scroll to cycle the hotbar selection. One step per wheel notch; a small
+            // threshold keeps high-resolution trackpad scrolling from spinning too fast.
+            if gameplayInputEnabled {
+                let dy = event.scrollingDeltaY
+                if dy > 0.5 {
+                    pendingScrollSteps -= 1
+                } else if dy < -0.5 {
+                    pendingScrollSteps += 1
+                }
+            }
         default:
             break
         }
@@ -115,6 +127,12 @@ final class GameInputController {
     func consumeFlyToggle() -> Bool {
         defer { pendingFlyToggle = false }
         return pendingFlyToggle
+    }
+
+    /// Net hotbar-cycle steps since the last frame (positive = next, negative = previous).
+    func consumeMaterialCycle() -> Int {
+        defer { pendingScrollSteps = 0 }
+        return pendingScrollSteps
     }
 
     func cancelGameplayInput() {
