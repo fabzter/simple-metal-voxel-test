@@ -70,6 +70,16 @@ final class MetalView: NSView {
   let drawableSize = makeDrawableSize(for: frame, backingScaleFactor: nil)
   let renderer = try Renderer(device: device, world: scene.world, drawableSize: drawableSize)
 
+  // The engine ships a good default sky; the demo picks its own slightly warmer mood to
+  // show how a game customizes the engine's atmosphere.
+  renderer.sky = SkyConfiguration(
+   sunDirection: SIMD3<Float>(0.35, 0.78, 0.52),
+   sunColor: SIMD3<Float>(1.0, 0.95, 0.84),
+   zenithColor: SIMD3<Float>(0.28, 0.50, 0.92),
+   horizonColor: SIMD3<Float>(0.78, 0.85, 0.93),
+   groundColor: SIMD3<Float>(0.32, 0.29, 0.25),
+   fogDensity: 0.004)
+
   // Restore persisted settings; keep compile-time defaults when missing.
   if let savedSensitivity = UserDefaults.standard.object(forKey: "settings.lookSensitivity")
    as? Float
@@ -195,7 +205,7 @@ final class MetalView: NSView {
     }
     DispatchQueue.main.asyncAfter(deadline: .now() + 3.2) { [weak self] in
      self?.showStatusBanner(
-      "WASD move · Shift sprint · F fly · ⌘? controls",
+      "WASD move · Shift sprint · F fly · 1–8 blocks · ⌘? controls",
       duration: 3.6)
     }
    }

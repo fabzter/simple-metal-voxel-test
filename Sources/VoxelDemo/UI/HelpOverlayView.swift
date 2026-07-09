@@ -40,7 +40,7 @@ final class HelpOverlayView: NSVisualEffectView {
             rows: [
                 ("Remove", "Left click"),
                 ("Place", "Right click"),
-                ("Block", "1–5"),
+                ("Block", "1–8 or scroll"),
                 ("Material view", "M"),
             ])
         let rightColumn = makeColumn(
