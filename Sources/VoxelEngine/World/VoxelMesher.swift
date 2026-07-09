@@ -278,6 +278,15 @@ struct VoxelMesher {
                 return .flat(color: SIMD3<Float>(0.92, 0.92, 0.98), previewTile: .stone)
             }
             return .flat(color: SIMD3<Float>(0.85, 0.86, 0.90), previewTile: .stone)
+        case .sand:
+            return .textured(tile: .sand, tint: SIMD3<Float>(1.0, 1.0, 1.0))
+        case .wood:
+            // End grain on the top, bark on the sides — a recognizable log look.
+            return isTop
+                ? .textured(tile: .woodTop, tint: SIMD3<Float>(1.0, 1.0, 1.0))
+                : .textured(tile: .wood, tint: SIMD3<Float>(1.0, 1.0, 1.0))
+        case .leaves:
+            return .textured(tile: .leaves, tint: SIMD3<Float>(0.95, 1.0, 0.95))
         }
     }
 

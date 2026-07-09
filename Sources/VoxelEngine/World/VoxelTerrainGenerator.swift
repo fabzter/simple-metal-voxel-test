@@ -12,11 +12,16 @@ struct VoxelTerrainGenerator {
 
     func populate(_ world: VoxelWorld) {
         let seedParameters = parameters(from: configuration.seed)
+        let size = world.gridSize
 
-        for x in 0..<world.gridSize {
-            for z in 0..<world.gridSize {
+        // Remember the top solid cell of each column so later passes (beaches, trees) can
+        // decorate the surface without re-deriving terrain height.
+        var surfaceHeights = [Int](repeating: -1, count: size * size)
+
+        for x in 0..<size {
+            for z in 0..<size {
                 let maxY = terrainHeight(x: x, z: z, seedParameters: seedParameters)
-                let clampedMaxY = min(maxY, world.gridSize - 1)
+                let clampedMaxY = min(maxY, size - 1)
 
                 guard clampedMaxY >= 0 else {
                     continue
@@ -32,8 +37,92 @@ struct VoxelTerrainGenerator {
 
                     world.setSolid(true, x: x, y: y, z: z)
                 }
+
+                surfaceHeights[z * size + x] = clampedMaxY
             }
         }
+
+        applySurfaceMaterials(world, surfaceHeights: surfaceHeights)
+        plantTrees(world, surfaceHeights: surfaceHeights)
+    }
+
+    // Gives low, dry basins a sandy top so the `sand` material shows up in generated worlds.
+    // Higher ground keeps its height-inferred grass/moss/snow (no explicit material, so no
+    // per-cell memory cost).
+    private func applySurfaceMaterials(_ world: VoxelWorld, surfaceHeights: [Int]) {
+        let size = world.gridSize
+        let sandCeiling = configuration.baseHeight - 6
+
+        for z in 0..<size {
+            for x in 0..<size {
+                let surfaceY = surfaceHeights[z * size + x]
+                guard surfaceY >= 0, surfaceY <= sandCeiling else { continue }
+
+                let depth = min(2, surfaceY)
+                for y in (surfaceY - depth)...surfaceY {
+                    world.setSolid(true, x: x, y: y, z: z, material: .sand)
+                }
+            }
+        }
+    }
+
+    // Scatters simple lollipop trees (wood trunk + leaf canopy) across grassy ground. Fully
+    // deterministic from the world seed via the shared hash, so the same seed always grows the
+    // same forest. Leaves only fill empty cells, so canopies merge gracefully instead of
+    // punching through terrain or each other.
+    private func plantTrees(_ world: VoxelWorld, surfaceHeights: [Int]) {
+        let size = world.gridSize
+        let treeSeed = configuration.seed ^ 0x7EE5_A11D_0C0F_FEE1
+
+        for z in 2..<(size - 2) {
+            for x in 2..<(size - 2) {
+                let surfaceY = surfaceHeights[z * size + x]
+                // Only on the grassy mid band, and only if the top cell is actually solid.
+                guard surfaceY >= 13, surfaceY <= 21, world.isSolid(x: x, y: surfaceY, z: z)
+                else { continue }
+
+                // Sparse, deterministic placement.
+                guard randomUnitValue(x: x, y: 0, z: z, seed: treeSeed) < 0.010 else { continue }
+
+                let trunkHeight = 4 + Int(randomUnitValue(x: x, y: 1, z: z, seed: treeSeed) * 3)
+                let topY = surfaceY + trunkHeight
+                guard topY + 2 < size else { continue }
+
+                // Trunk, on a grass base.
+                world.setSolid(true, x: x, y: surfaceY, z: z, material: .grass)
+                for y in (surfaceY + 1)...topY {
+                    world.setSolid(true, x: x, y: y, z: z, material: .wood)
+                }
+                plantCanopy(world, centerX: x, centerZ: z, topY: topY, size: size)
+            }
+        }
+    }
+
+    private func plantCanopy(
+        _ world: VoxelWorld, centerX: Int, centerZ: Int, topY: Int, size: Int
+    ) {
+        func leafIfEmpty(_ x: Int, _ y: Int, _ z: Int) {
+            guard x >= 0, x < size, y >= 0, y < size, z >= 0, z < size else { return }
+            guard !world.isSolid(x: x, y: y, z: z) else { return }
+            world.setSolid(true, x: x, y: y, z: z, material: .leaves)
+        }
+
+        // Two broad layers (radius 2, corners trimmed) wrapping the trunk top.
+        for y in [topY - 2, topY - 1] {
+            for dz in -2...2 {
+                for dx in -2...2 {
+                    if abs(dx) == 2 && abs(dz) == 2 { continue }
+                    leafIfEmpty(centerX + dx, y, centerZ + dz)
+                }
+            }
+        }
+        // A 3x3 cap plus a single crown block for a rounded top.
+        for dz in -1...1 {
+            for dx in -1...1 {
+                leafIfEmpty(centerX + dx, topY, centerZ + dz)
+            }
+        }
+        leafIfEmpty(centerX, topY + 1, centerZ)
     }
 
     // Derive repeatable offsets and scale variations from the seed.

@@ -79,4 +79,37 @@ struct RenderPipelineFactory {
 
         return depthState
     }
+
+    /// Pipeline for the full-screen gradient sky. It takes no vertex buffer — the vertex
+    /// shader generates one big triangle from `vertex_id` — so there is no vertex
+    /// descriptor here. Drawn first each frame as the background behind the world.
+    static func makeSkyPipelineState(device: MTLDevice, library: MTLLibrary) throws
+        -> MTLRenderPipelineState
+    {
+        let descriptor = MTLRenderPipelineDescriptor()
+        descriptor.vertexFunction = library.makeFunction(name: "vertex_sky")
+        descriptor.fragmentFunction = library.makeFunction(name: "fragment_sky")
+        descriptor.colorAttachments[0].pixelFormat = .bgra8Unorm
+        descriptor.depthAttachmentPixelFormat = .depth32Float
+
+        do {
+            return try device.makeRenderPipelineState(descriptor: descriptor)
+        } catch {
+            throw RendererSetupError.pipelineStateUnavailable(error)
+        }
+    }
+
+    /// Depth state for the sky: always passes and never writes depth, so the sky fills
+    /// every background pixel without occluding the world drawn on top of it afterward.
+    static func makeSkyDepthState(device: MTLDevice) throws -> MTLDepthStencilState {
+        let descriptor = MTLDepthStencilDescriptor()
+        descriptor.depthCompareFunction = .always
+        descriptor.isDepthWriteEnabled = false
+
+        guard let depthState = device.makeDepthStencilState(descriptor: descriptor) else {
+            throw RendererSetupError.depthStateUnavailable
+        }
+
+        return depthState
+    }
 }

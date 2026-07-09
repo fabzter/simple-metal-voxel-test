@@ -1,6 +1,10 @@
 #include <metal_stdlib>
 using namespace metal;
 
+// ============================================================================
+// Vertex / uniform layout
+// ============================================================================
+
 struct VertexIn {
     float3 position [[attribute(0)]];
     float3 normal [[attribute(1)]];
@@ -14,9 +18,13 @@ struct VertexOut {
     float3 color;
     float2 uv;
     float materialMode;
-    float lightAmount;
+    float3 light;      // per-vertex lighting (sky ambient + sun), interpolated
+    float fogFactor;   // 0 = clear, 1 = fully faded into the horizon color
 };
 
+// MUST match `Uniforms` in RenderTypes.swift field-for-field and in order. All fields
+// after `fadeThreshold` are 16-byte-aligned (float4 / float4x4) so Swift and Metal agree
+// on padding and the struct is binary-compatible across the language boundary.
 struct Uniforms {
     float4x4 projection;
     float4x4 view;
@@ -25,18 +33,67 @@ struct Uniforms {
     float4 lodTintColor;
     float4 highlightColor;
     float fadeThreshold;        // 1.0 = fully drawn; < 1.0 = dither threshold
+
+    // Atmosphere.
+    float4x4 inverseViewProjection;  // NDC -> world, for the sky view ray
+    float4 cameraPositionAndFog;     // xyz = camera world pos, w = fog density
+    float4 sunDirection;             // xyz = normalized direction toward the sun
+    float4 sunColor;                 // rgb = sunlight / sun-disk color
+    float4 skyZenithColor;           // rgb = sky straight up
+    float4 skyHorizonColor;          // rgb = horizon color (also the fog color)
+    float4 groundColor;              // rgb = below-horizon + downward ambient bounce
 };
+
+// ============================================================================
+// Shared atmosphere helpers
+// ============================================================================
+
+// Direction-based sky color: a horizon->zenith gradient above the horizon, fading to the
+// ground color below it, plus a soft sun disk and glow. Used by the full-screen sky pass.
+static inline float3 skyColor(float3 dir, constant Uniforms& u) {
+    float up = dir.y;
+    // pow() biases the gradient so most of the visible sky is the pleasant mid-blue and
+    // the deep zenith color only appears when looking steeply upward.
+    float3 above = mix(u.skyHorizonColor.rgb, u.skyZenithColor.rgb, pow(saturate(up), 0.5));
+    float3 below = mix(u.skyHorizonColor.rgb, u.groundColor.rgb, pow(saturate(-up), 0.5));
+    float3 base = up >= 0.0 ? above : below;
+
+    // Sun disk (tight) + glow (broad) from the angle between the view ray and the sun.
+    float d = max(dot(dir, normalize(u.sunDirection.xyz)), 0.0);
+    float disk = smoothstep(0.9990, 0.9996, d);
+    float glow = pow(d, 220.0) * 0.35 + pow(d, 24.0) * 0.12;
+    return base + u.sunColor.rgb * (disk + glow);
+}
+
+// ============================================================================
+// World (voxel) pass
+// ============================================================================
 
 vertex VertexOut vertex_main(VertexIn in [[stage_in]],
                              constant Uniforms& uniforms [[buffer(1)]]) {
     VertexOut out;
+    // Mesh vertices are already in world space (there is no model matrix), so `in.position`
+    // doubles as the world position we need for fog distance.
     out.position = uniforms.projection * uniforms.view * float4(in.position, 1.0);
     out.color = in.color;
     out.uv = in.uv;
     out.materialMode = in.materialMode;
 
-    constexpr float3 lightDir = float3(0.44022545, -0.8804509, 0.17609018);
-    out.lightAmount = max(dot(in.normal, -lightDir), 0.2);
+    // Lighting: warm directional sun + hemispheric sky/ground ambient. Faces pointing up
+    // catch sky color; faces pointing down catch a darker ground bounce. Computing this
+    // per-vertex keeps it cheap and matches the project's readable, lightweight style.
+    float3 normal = normalize(in.normal);
+    float3 sunDir = normalize(uniforms.sunDirection.xyz);
+    float diffuse = max(dot(normal, sunDir), 0.0);
+    float hemi = normal.y * 0.5 + 0.5;  // 1 looking up, 0 looking down
+    float3 ambient = mix(uniforms.groundColor.rgb, uniforms.skyZenithColor.rgb, hemi);
+    out.light = ambient * 0.55 + uniforms.sunColor.rgb * (diffuse * 0.65);
+
+    // Exponential-squared distance fog: near blocks stay crisp, far terrain melts into the
+    // horizon color (which also hides distant LOD transitions).
+    float distance = length(in.position - uniforms.cameraPositionAndFog.xyz);
+    float f = distance * uniforms.cameraPositionAndFog.w;
+    out.fogFactor = 1.0 - exp(-f * f);
 
     return out;
 }
@@ -77,7 +134,10 @@ fragment float4 fragment_main(VertexOut in [[stage_in]],
 
     float3 representativeFlatColor = flatColor;
     if (flatColorsOnly && usesTextureMaterial) {
-        float2 tileCenterUV = floor(in.uv * 2.0) * 0.5 + float2(0.25, 0.25);
+        // Sample the center of the material's atlas tile. The atlas is a 4x2 grid, so map
+        // the UV to its tile cell and take that cell's midpoint.
+        float2 grid = float2(4.0, 2.0);
+        float2 tileCenterUV = (floor(in.uv * grid) + 0.5) / grid;
         half4 tileCenterSample = materialAtlas.sample(atlasSampler, tileCenterUV);
         representativeFlatColor = in.color * float3(tileCenterSample.rgb);
     }
@@ -100,8 +160,45 @@ fragment float4 fragment_main(VertexOut in [[stage_in]],
         baseColor = mix(baseColor, uniforms.lodTintColor.rgb, uniforms.lodTintColor.a);
     }
 
-    return float4(baseColor * in.lightAmount, 1.0);
+    // Apply lighting, then blend toward the horizon/fog color by distance.
+    float3 litColor = baseColor * in.light;
+    float3 finalColor = mix(litColor, uniforms.skyHorizonColor.rgb, saturate(in.fogFactor));
+    return float4(finalColor, 1.0);
 }
+
+// ============================================================================
+// Sky pass (full-screen background gradient + sun)
+// ============================================================================
+
+struct SkyVertexOut {
+    float4 position [[position]];
+    float2 ndc;
+};
+
+// One oversized triangle that covers the whole screen, generated from the vertex id so no
+// vertex buffer is needed. The extra area outside [-1,1] is simply clipped.
+vertex SkyVertexOut vertex_sky(uint vertexID [[vertex_id]]) {
+    float2 corners[3] = { float2(-1.0, -1.0), float2(3.0, -1.0), float2(-1.0, 3.0) };
+    float2 p = corners[vertexID];
+    SkyVertexOut out;
+    out.position = float4(p, 1.0, 1.0);  // z = far; sky depth state ignores depth anyway
+    out.ndc = p;
+    return out;
+}
+
+fragment float4 fragment_sky(SkyVertexOut in [[stage_in]],
+                             constant Uniforms& uniforms [[buffer(1)]]) {
+    // Recover a world-space ray for this pixel by un-projecting two points along its
+    // clip-space line and taking the direction between them.
+    float4 nearW = uniforms.inverseViewProjection * float4(in.ndc, 0.0, 1.0);
+    float4 farW = uniforms.inverseViewProjection * float4(in.ndc, 1.0, 1.0);
+    float3 rayDir = normalize(farW.xyz / farW.w - nearW.xyz / nearW.w);
+    return float4(skyColor(rayDir, uniforms), 1.0);
+}
+
+// ============================================================================
+// Selection highlight pass
+// ============================================================================
 
 struct HighlightVertexOut {
     float4 position [[position]];

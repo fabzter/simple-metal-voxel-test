@@ -46,6 +46,9 @@ public enum WorldSaveCodec {
     case .stone: 2
     case .moss: 3
     case .snow: 4
+    case .sand: 5
+    case .wood: 6
+    case .leaves: 7
     }
   }
 
@@ -56,6 +59,9 @@ public enum WorldSaveCodec {
     case 2: .stone
     case 3: .moss
     case 4: .snow
+    case 5: .sand
+    case 6: .wood
+    case 7: .leaves
     default: nil
     }
   }

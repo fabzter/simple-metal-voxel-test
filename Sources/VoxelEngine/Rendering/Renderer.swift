@@ -27,8 +27,12 @@ public final class Renderer {
  private let commandQueue: MTLCommandQueue
  private let pipelineState: MTLRenderPipelineState
  private let highlightPipelineState: MTLRenderPipelineState
+ private let skyPipelineState: MTLRenderPipelineState
  private let depthState: MTLDepthStencilState
+ private let skyDepthState: MTLDepthStencilState
  public var projectionConfiguration: ProjectionConfiguration
+ /// Atmosphere (sky gradient, sun, fog color). Public so the demo can set a mood.
+ public var sky: SkyConfiguration = .default
  private let lodConfiguration: LODConfiguration
  private let materialAtlas: MaterialAtlas
  private let occlusionCuller = ChunkOcclusionCuller()
@@ -104,6 +108,10 @@ public final class Renderer {
    device: device,
    library: shaderLibrary.library)
   self.depthState = try RenderPipelineFactory.makeDepthState(device: device)
+  self.skyPipelineState = try RenderPipelineFactory.makeSkyPipelineState(
+   device: device,
+   library: shaderLibrary.library)
+  self.skyDepthState = try RenderPipelineFactory.makeSkyDepthState(device: device)
   self.projectionConfiguration = projectionConfiguration
   self.lodConfiguration = lodConfiguration
   self.materialAtlas = try MaterialAtlas(device: device, commandQueue: commandQueue)
@@ -169,7 +177,8 @@ public final class Renderer {
   let cameraUniforms = CameraUniforms(
    camera: camera,
    projectionConfiguration: projectionConfiguration,
-   drawableSize: drawableSize)
+   drawableSize: drawableSize,
+   sky: sky)
 
   let frustumCuller = FrustumCuller(
    viewProjectionMatrix: simd_mul(cameraUniforms.projection, cameraUniforms.view))
@@ -263,10 +272,11 @@ public final class Renderer {
   passDescriptor.colorAttachments[0].texture = drawable.texture
   passDescriptor.colorAttachments[0].loadAction = .clear
   passDescriptor.colorAttachments[0].storeAction = .store
+  // Clear to the horizon color as a safe fallback; the sky pass paints over it.
   passDescriptor.colorAttachments[0].clearColor = MTLClearColor(
-   red: 0.6,
-   green: 0.8,
-   blue: 1.0,
+   red: Double(sky.horizonColor.x),
+   green: Double(sky.horizonColor.y),
+   blue: Double(sky.horizonColor.z),
    alpha: 1.0)
 
   passDescriptor.depthAttachment.texture = depthTexture
@@ -277,6 +287,21 @@ public final class Renderer {
   guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: passDescriptor) else {
    return
   }
+
+  // Sky first: a full-screen gradient behind the world. Depth writes are disabled
+  // (skyDepthState) so the terrain drawn next always sits in front of it.
+  var skyUniforms = cameraUniforms.rawValue(
+   materialDebugMode: debugSettings.materialMode,
+   lodTintOverlayMode: .off,
+   lodTintColor: SIMD4<Float>(0, 0, 0, 0),
+   highlightColor: SIMD4<Float>(0, 0, 0, 0),
+   fadeThreshold: 1.0)
+  encoder.setRenderPipelineState(skyPipelineState)
+  encoder.setDepthStencilState(skyDepthState)
+  encoder.setCullMode(.none)
+  encoder.setVertexBytes(&skyUniforms, length: MemoryLayout<Uniforms>.stride, index: 1)
+  encoder.setFragmentBytes(&skyUniforms, length: MemoryLayout<Uniforms>.stride, index: 1)
+  encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
 
   encoder.setRenderPipelineState(pipelineState)
   encoder.setDepthStencilState(depthState)
