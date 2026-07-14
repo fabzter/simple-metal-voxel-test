@@ -161,6 +161,42 @@ struct VoxelWorldTests {
     }
 
     @Test
+    func chunkOccupancyTracksSetSolid() {
+        let world = VoxelWorld(gridSize: 32, chunkSize: 16, generation: .empty)
+        let originChunk = VoxelChunkIndex(x: 0, y: 0, z: 0)
+        let neighborChunk = VoxelChunkIndex(x: 1, y: 0, z: 0)
+
+        #expect(!world.chunkHasSolidVoxels(originChunk))
+        #expect(!world.chunkHasSolidVoxels(neighborChunk))
+
+        world.setSolid(true, x: 2, y: 3, z: 4)
+        #expect(world.chunkHasSolidVoxels(originChunk))
+        #expect(!world.chunkHasSolidVoxels(neighborChunk))
+
+        world.setSolid(true, x: 2, y: 3, z: 4)
+        world.setSolid(false, x: 2, y: 3, z: 4)
+        #expect(!world.chunkHasSolidVoxels(originChunk))
+    }
+
+    @Test
+    func restoredWorldRebuildsChunkOccupancy() {
+        let world = VoxelWorld(gridSize: 32, chunkSize: 16, generation: .empty)
+        world.setSolid(true, x: 2, y: 2, z: 2)
+        world.setSolid(true, x: 17, y: 2, z: 2)
+
+        let snapshot = world.makeSaveSnapshot()
+        let restored = VoxelWorld.restored(
+            gridSize: 32, chunkSize: 16,
+            seed: 1, words: snapshot.words, materials: snapshot.materials)
+
+        #expect(restored != nil)
+        let restoredWorld = restored!
+        #expect(restoredWorld.chunkHasSolidVoxels(VoxelChunkIndex(x: 0, y: 0, z: 0)))
+        #expect(restoredWorld.chunkHasSolidVoxels(VoxelChunkIndex(x: 1, y: 0, z: 0)))
+        #expect(!restoredWorld.chunkHasSolidVoxels(VoxelChunkIndex(x: 0, y: 1, z: 0)))
+    }
+
+    @Test
     func chunkBoundaryEditInvalidatesAdjacentChunks() {
         let world = VoxelWorld(gridSize: 32, chunkSize: 16, generation: .empty)
         let leftChunk = VoxelChunkIndex(x: 0, y: 0, z: 0)

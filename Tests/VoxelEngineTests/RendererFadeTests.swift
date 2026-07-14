@@ -125,6 +125,7 @@ struct RendererFadeTests {
         #expect(renderer.activeFadeCount == 0)
 
         // Repopulate after reset.
+        freshWorld.setSolid(true, x: 8, y: 8, z: 8)
         try renderer.render(
             into: layer, world: freshWorld, camera: cam,
             selectedHit: nil as VoxelRaycastHit?, editFeedback: nil as EditFeedback?)

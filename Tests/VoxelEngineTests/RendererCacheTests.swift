@@ -96,22 +96,41 @@ struct RendererCacheTests {
         }
     }
 
-    // MARK: - Empty-chunk sentinel
+    // MARK: - Empty-chunk skip
 
     @Test
-    func emptyChunksShareOneSentinelBuffer() throws {
+    func emptyChunksAreNeverMeshedOrCached() throws {
         guard let (device, size, layer) = makeDevice() else { return }
         let world = VoxelWorld(gridSize: 64, chunkSize: 16, generation: .empty)
-        let renderer = try makeRenderer(
-            device: device, drawableSize: size, generation: .empty)
+        let lod = LODConfiguration(levels: [
+            .init(maxChunkDistance: 2, voxelStride: 1),
+            .init(maxChunkDistance: 3, voxelStride: 2),
+            .init(maxChunkDistance: 6, voxelStride: 4),
+        ])
+        let renderer = try Renderer(
+            device: device,
+            world: world,
+            drawableSize: size,
+            lodConfiguration: lod)
+        var debug = RenderDebugSettings()
+        debug.frustumCullingEnabled = false
+        debug.occlusionCullingEnabled = false
+        renderer.debugSettings = debug
 
-        let cam = CameraState(position: SIMD3<Float>(32, 32, 32), yaw: 0, pitch: 0)
+        let cam = CameraState(position: SIMD3<Float>(8, 20, 8), yaw: 0, pitch: -1.2)
         try renderer.render(
             into: layer, world: world, camera: cam,
             selectedHit: nil as VoxelRaycastHit?, editFeedback: nil as EditFeedback?)
 
-        #expect(renderer.meshBufferCacheCount == 64)
-        #expect(renderer.currentVertexCount == 0)
-        #expect(renderer.cachedBuffersAreAllIdentical())
+        #expect(renderer.meshBufferCacheCount == 0)
+        #expect(renderer.currentVisibleChunkCount == 0)
+
+        world.setSolid(true, x: 8, y: 8, z: 8)
+        try renderer.render(
+            into: layer, world: world, camera: cam,
+            selectedHit: nil as VoxelRaycastHit?, editFeedback: nil as EditFeedback?)
+
+        #expect(renderer.meshBufferCacheCount == 1)
+        #expect(renderer.currentVisibleChunkCount == 1)
     }
 }

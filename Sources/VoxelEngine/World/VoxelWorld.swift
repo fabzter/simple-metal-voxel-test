@@ -14,6 +14,9 @@ public final class VoxelWorld {
     private var chunkRevisions: [VoxelChunkIndex: UInt64]
     private let chunkIndices: [VoxelChunkIndex]
     private var explicitMaterials: [Int: BlockMaterialType] = [:]
+    /// Solid-voxel count per chunk. The renderer uses this to skip all-air chunks
+    /// before doing any LOD, frustum, occlusion, or meshing work.
+    private var chunkSolidCounts: [VoxelChunkIndex: Int] = [:]
 
     public init(
         gridSize: Int = 64,
@@ -77,6 +80,9 @@ public final class VoxelWorld {
         let world = VoxelWorld(gridSize: gridSize, chunkSize: chunkSize, generation: .empty)
         world.solidGrid = restoredGrid
         world.explicitMaterials = materials
+        // Restores inject the bit grid directly instead of replaying `setSolid`, so rebuild
+        // the per-chunk occupancy table once here.
+        world.recomputeChunkSolidCounts()
         world.generation = .terrain(VoxelWorldConfiguration(seed: seed))
         return world
     }
@@ -103,6 +109,8 @@ public final class VoxelWorld {
         }
 
         solidGrid[cellIndex] = isSolid
+        let chunk = VoxelChunkIndex(x: x / chunkSize, y: y / chunkSize, z: z / chunkSize)
+        chunkSolidCounts[chunk, default: 0] += isSolid ? 1 : -1
         if isSolid {
             if let material {
                 explicitMaterials[cellIndex] = material
@@ -137,6 +145,11 @@ public final class VoxelWorld {
 
     public func chunkRevision(for chunkIndex: VoxelChunkIndex) -> UInt64 {
         chunkRevisions[chunkIndex, default: 0]
+    }
+
+    /// Returns whether a chunk contains any solid voxels. O(1).
+    public func chunkHasSolidVoxels(_ chunkIndex: VoxelChunkIndex) -> Bool {
+        chunkSolidCounts[chunkIndex, default: 0] > 0
     }
 
     func chunkIndex(containing cell: VoxelIndex) -> VoxelChunkIndex? {
@@ -231,6 +244,22 @@ public final class VoxelWorld {
             }
         }
         return indices
+    }
+
+    private func recomputeChunkSolidCounts() {
+        chunkSolidCounts.removeAll(keepingCapacity: true)
+
+        for z in 0..<gridSize {
+            for y in 0..<gridSize {
+                for x in 0..<gridSize where solidGrid[index(x: x, y: y, z: z)] {
+                    let chunk = VoxelChunkIndex(
+                        x: x / chunkSize,
+                        y: y / chunkSize,
+                        z: z / chunkSize)
+                    chunkSolidCounts[chunk, default: 0] += 1
+                }
+            }
+        }
     }
 
     private func resetChunkRevisions() {
