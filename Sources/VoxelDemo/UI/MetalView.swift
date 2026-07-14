@@ -18,6 +18,8 @@ final class MetalView: NSView {
  private let debugControlPanelView: DebugControlPanelView
  private let statusBannerView: StatusBannerView
  private let hotbarView: HotbarView
+ private var settings: SettingsStore
+ private var renderScale: CGFloat
 
  private var gameLoop: GameLoop?
  private weak var observedWindow: NSWindow?
@@ -66,8 +68,12 @@ final class MetalView: NSView {
    scene = GameScene(gridSize: 256)
    launchedFromSave = false
   }
+  let settings = SettingsStore()
   let inputController = GameInputController()
-  let drawableSize = makeDrawableSize(for: frame, backingScaleFactor: nil)
+  let drawableSize = makeDrawableSize(
+   for: frame,
+   backingScaleFactor: nil,
+   renderScale: CGFloat(settings.renderScale))
   let renderer = try Renderer(device: device, world: scene.world, drawableSize: drawableSize)
 
   // The engine ships a good default sky; the demo picks its own slightly warmer mood to
@@ -80,19 +86,6 @@ final class MetalView: NSView {
    groundColor: SIMD3<Float>(0.32, 0.29, 0.25),
    fogDensity: 0.004)
 
-  // Restore persisted settings; keep compile-time defaults when missing.
-  if let savedSensitivity = UserDefaults.standard.object(forKey: "settings.lookSensitivity")
-   as? Float
-  {
-   scene.player.cameraConfiguration.lookSensitivity = max(
-    0.001, min(0.012, savedSensitivity))
-  }
-  if let savedFOV = UserDefaults.standard.object(forKey: "settings.fieldOfViewDegrees")
-   as? Float
-  {
-   renderer.projectionConfiguration.fieldOfViewDegrees = max(50, min(100, savedFOV))
-  }
-
   let debugHUDView = DebugHUDView(frame: .zero)
   let minimapView = MinimapView(frame: .zero)
   let crosshairView = CrosshairView(frame: .zero)
@@ -101,7 +94,7 @@ final class MetalView: NSView {
   let statusBannerView = StatusBannerView(frame: .zero)
   let hotbarView = HotbarView(frame: .zero)
 
-  return MetalView(
+  let view = MetalView(
    configuredFrame: frame,
    scene: scene,
    inputController: inputController,
@@ -114,7 +107,12 @@ final class MetalView: NSView {
    debugControlPanelView: debugControlPanelView,
    statusBannerView: statusBannerView,
    hotbarView: hotbarView,
+   settings: settings,
    launchedFromSave: launchedFromSave)
+  view.applyCameraSettings(to: scene)
+  view.renderer.projectionConfiguration.fieldOfViewDegrees = view.settings.fieldOfViewDegrees
+  view.updateOverlayViews()
+  return view
  }
 
  override init(frame frameRect: NSRect) {
@@ -134,6 +132,7 @@ final class MetalView: NSView {
   debugControlPanelView: DebugControlPanelView,
   statusBannerView: StatusBannerView,
   hotbarView: HotbarView,
+  settings: SettingsStore,
   launchedFromSave: Bool
  ) {
   self.scene = scene
@@ -147,6 +146,8 @@ final class MetalView: NSView {
   self.debugControlPanelView = debugControlPanelView
   self.statusBannerView = statusBannerView
   self.hotbarView = hotbarView
+  self.settings = settings
+  self.renderScale = CGFloat(settings.renderScale)
   self.launchedFromSave = launchedFromSave
 
   super.init(frame: frameRect)
@@ -190,8 +191,8 @@ final class MetalView: NSView {
   if window != nil {
    gameLoop?.start()
    updateInteractiveState()
-   soundEngine.setEnabled(
-    UserDefaults.standard.object(forKey: "settings.soundEnabled") as? Bool ?? true)
+   soundEngine.setEnabled(settings.soundEnabled)
+   soundEngine.setMasterVolume(settings.masterVolume)
    soundEngine.start()
    if !hasShownWelcomeHint {
     hasShownWelcomeHint = true
@@ -319,19 +320,18 @@ final class MetalView: NSView {
   }
 
   debugControlPanelView.onLookSensitivityChanged = { [weak self] value in
-   self?.scene.player.cameraConfiguration.lookSensitivity = value
-   UserDefaults.standard.set(value, forKey: "settings.lookSensitivity")
+   self?.setLookSensitivity(value)
   }
   debugControlPanelView.onFieldOfViewChanged = { [weak self] value in
-   self?.renderer.projectionConfiguration.fieldOfViewDegrees = value
-   UserDefaults.standard.set(value, forKey: "settings.fieldOfViewDegrees")
+   self?.setFieldOfView(value)
   }
  }
 
  private func updateDrawableSize() {
   let drawableSize = Self.makeDrawableSize(
    for: frame,
-   backingScaleFactor: window?.backingScaleFactor)
+   backingScaleFactor: window?.backingScaleFactor,
+   renderScale: renderScale)
   metalLayer.drawableSize = drawableSize
   renderer.resize(drawableSize: drawableSize)
  }
@@ -668,9 +668,17 @@ final class MetalView: NSView {
   return scene
  }
 
+ /// Every world swap builds a fresh player, so reapply the persisted camera feel
+ /// instead of falling back to compile-time defaults until the next relaunch.
+ private func applyCameraSettings(to scene: GameScene) {
+  scene.player.cameraConfiguration.lookSensitivity = settings.lookSensitivity
+  scene.player.cameraConfiguration.invertLookY = settings.invertLookY
+ }
+
  /// Every world change (new/load/reset) funnels through here so the renderer,
  /// input state, window title, and overlays stay consistent.
  private func adoptScene(_ newScene: GameScene, banner: String) {
+  applyCameraSettings(to: newScene)
   scene = newScene
   renderer.resetWorldSynchronization(with: newScene.world)
   inputController.cancelGameplayInput()
@@ -817,10 +825,45 @@ final class MetalView: NSView {
 
  var isSoundEnabled: Bool { soundEngine.isEnabled }
 
+ func setLookSensitivity(_ value: Float) {
+  settings.lookSensitivity = value
+  scene.player.cameraConfiguration.lookSensitivity = settings.lookSensitivity
+  updateOverlayViews()
+ }
+
+ func setFieldOfView(_ value: Float) {
+  settings.fieldOfViewDegrees = value
+  renderer.projectionConfiguration.fieldOfViewDegrees = settings.fieldOfViewDegrees
+  updateOverlayViews()
+ }
+
+ func setInvertLookY(_ value: Bool) {
+  settings.invertLookY = value
+  scene.player.cameraConfiguration.invertLookY = settings.invertLookY
+ }
+
+ func setRenderScale(_ scale: CGFloat) {
+  let clampedScale = min(max(scale, 0.5), 2.0)
+  guard abs(clampedScale - renderScale) > 0.0001 else { return }
+  renderScale = clampedScale
+  settings.renderScale = Float(clampedScale)
+  updateDrawableSize()
+  showStatusBanner("Render resolution \(Int(clampedScale * 100))%")
+ }
+
+ func setSoundEnabled(_ value: Bool) {
+  settings.soundEnabled = value
+  soundEngine.setEnabled(settings.soundEnabled)
+ }
+
+ func setMasterVolume(_ value: Float) {
+  settings.masterVolume = value
+  soundEngine.setMasterVolume(settings.masterVolume)
+ }
+
  func toggleSoundEffects() {
   let enabled = !soundEngine.isEnabled
-  soundEngine.setEnabled(enabled)
-  UserDefaults.standard.set(enabled, forKey: "settings.soundEnabled")
+  setSoundEnabled(enabled)
   showStatusBanner(enabled ? "Sound effects on" : "Sound effects off")
  }
 
@@ -846,9 +889,19 @@ final class MetalView: NSView {
   RecentWorldsStore().clear()
  }
 
- private static func makeDrawableSize(for frame: NSRect, backingScaleFactor: CGFloat?) -> CGSize {
+ var currentRenderScale: CGFloat { renderScale }
+
+ /// Rendering below native resolution is the fastest GPU lever in the demo, and the
+ /// CAMetalLayer scales the smaller drawable back up to the window for free.
+ nonisolated static func makeDrawableSize(
+  for frame: NSRect,
+  backingScaleFactor: CGFloat?,
+  renderScale: CGFloat
+ ) -> CGSize {
   let scale = backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2.0
-  return CGSize(width: frame.width * scale, height: frame.height * scale)
+  return CGSize(
+   width: max(1, floor(frame.width * scale * renderScale)),
+   height: max(1, floor(frame.height * scale * renderScale)))
  }
 }
 

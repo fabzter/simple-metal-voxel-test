@@ -36,4 +36,26 @@ struct MetalViewStartupTests {
         #expect(helpOverlay != nil)
         #expect(helpOverlay?.isHidden == false)
     }
+
+    @Test
+    func renderScaleShrinksDrawable() {
+        let frame = NSRect(x: 0, y: 0, width: 1024, height: 768)
+        let halfScale = MetalView.makeDrawableSize(
+            for: frame,
+            backingScaleFactor: 2,
+            renderScale: 0.5)
+        let nativeScale = MetalView.makeDrawableSize(
+            for: frame,
+            backingScaleFactor: 2,
+            renderScale: 1)
+        let minimumSize = MetalView.makeDrawableSize(
+            for: .zero,
+            backingScaleFactor: 2,
+            renderScale: 0.5)
+
+        #expect(halfScale == CGSize(width: 1024, height: 768))
+        #expect(nativeScale == CGSize(width: 2048, height: 1536))
+        #expect(minimumSize.width >= 1)
+        #expect(minimumSize.height >= 1)
+    }
 }
