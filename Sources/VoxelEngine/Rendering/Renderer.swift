@@ -49,6 +49,9 @@ public final class Renderer {
  // Injectible clock so tests can fast-forward fade expiry without wall-clock waits.
  private let fadeDuration: Double = 0.25
  private let maxSimultaneousFades = 128
+ /// Occlusion rays are only worth their CPU cost for nearby chunks. Past this range,
+ /// coarse far-LOD meshes are cheaper to draw than empty-sky ray marches are to test.
+ private let occlusionCullingMaxDistance: Float = 96
  var timeSource: () -> Double = { CACurrentMediaTime() }
  private var depthTexture: MTLTexture?
 
@@ -188,6 +191,9 @@ public final class Renderer {
   visibleSelections.reserveCapacity(world.allChunkIndices().count)
 
   for chunkIndex in world.allChunkIndices() {
+   // Most chunks in the demo world are pure air. Skip them before any LOD/frustum/
+   // occlusion/meshing work so "look at the sky" stays cheap.
+   guard world.chunkHasSolidVoxels(chunkIndex) else { continue }
    guard
     let lodLevel = selectedLODLevel(
      for: chunkIndex,
@@ -201,8 +207,11 @@ public final class Renderer {
    if debugSettings.frustumCullingEnabled && !frustumCuller.isVisible(bounds: bounds) {
     continue
    }
+   let chunkCenter = (bounds.minimum + bounds.maximum) * 0.5
+   let chunkDistance = simd_length(chunkCenter - camera.position)
    if debugSettings.occlusionCullingEnabled
     && debugSettings.lodTintOverlayMode == .off
+    && chunkDistance <= occlusionCullingMaxDistance
     && !occlusionCuller.isVisible(chunkIndex: chunkIndex, world: world, camera: camera)
    {
     continue
