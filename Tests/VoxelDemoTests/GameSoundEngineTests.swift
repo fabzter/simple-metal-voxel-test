@@ -16,3 +16,18 @@ func startingAndPlayingNeverCrashes() {
     engine.setEnabled(true)
     #expect(engine.isEnabled == true)
 }
+
+@MainActor
+@Test
+func masterVolumeClampsAndPersistsAcrossToggle() {
+    let engine = GameSoundEngine()
+
+    engine.setMasterVolume(1.7)
+    #expect(engine.masterVolume == 1)
+
+    engine.setMasterVolume(0.3)
+    engine.setEnabled(false)
+    engine.setEnabled(true)
+
+    #expect(engine.masterVolume == 0.3)
+}

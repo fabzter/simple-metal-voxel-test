@@ -187,6 +187,7 @@ final class GameSoundEngine {
  private var isRunning = false
 
  private(set) var isEnabled = true
+ private(set) var masterVolume: Float = 1
 
  /// Node graph wiring happens in `start()` where the hardware format is known;
  /// constructing the engine never touches CoreAudio, so building a MetalView in
@@ -195,7 +196,13 @@ final class GameSoundEngine {
 
  func setEnabled(_ enabled: Bool) {
   isEnabled = enabled
-  engine.mainMixerNode.outputVolume = enabled ? 1 : 0
+  engine.mainMixerNode.outputVolume = enabled ? masterVolume : 0
+ }
+
+ /// Master volume lives on the mixer so the relative per-effect voice levels stay intact.
+ func setMasterVolume(_ volume: Float) {
+  masterVolume = min(max(volume, 0), 1)
+  engine.mainMixerNode.outputVolume = isEnabled ? masterVolume : 0
  }
 
  /// Starts the engine, synthesizes the effect buffers at the output sample rate,
@@ -223,7 +230,7 @@ final class GameSoundEngine {
   engine.attach(footstepPlayer)
   engine.connect(footstepPlayer, to: engine.mainMixerNode, format: monoFormat)
   footstepPlayer.volume = 0.5
-  engine.mainMixerNode.outputVolume = isEnabled ? 1 : 0
+  engine.mainMixerNode.outputVolume = isEnabled ? masterVolume : 0
 
   do {
    try engine.start()

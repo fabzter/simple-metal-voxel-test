@@ -97,4 +97,23 @@ struct PlayerControllerTests {
         player.update(dt: 0.1, input: PlayerInput(), in: world)
         #expect(player.position.y < yBeforeFall)
     }
+
+    @Test
+    func invertLookYFlipsPitchDirection() {
+        let normal = PlayerController(
+            cameraPitch: 0,
+            cameraConfiguration: CameraConfiguration(lookSensitivity: 0.01))
+        let inverted = PlayerController(
+            cameraPitch: 0,
+            cameraConfiguration: CameraConfiguration(
+                lookSensitivity: 0.01,
+                invertLookY: true))
+
+        normal.rotateCamera(deltaX: 0, deltaY: 10)
+        inverted.rotateCamera(deltaX: 0, deltaY: 10)
+
+        #expect(normal.cameraPitch > 0)
+        #expect(inverted.cameraPitch < 0)
+        #expect(abs(normal.cameraPitch + inverted.cameraPitch) < 0.0001)
+    }
 }

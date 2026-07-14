@@ -58,7 +58,8 @@ public final class PlayerController {
 
     public func rotateCamera(deltaX: Float, deltaY: Float) {
         cameraYaw += deltaX * cameraConfiguration.lookSensitivity
-        cameraPitch += deltaY * cameraConfiguration.lookSensitivity
+        let pitchDirection: Float = cameraConfiguration.invertLookY ? -1 : 1
+        cameraPitch += deltaY * cameraConfiguration.lookSensitivity * pitchDirection
         cameraPitch = min(
             max(cameraPitch, cameraConfiguration.minimumPitch),
             cameraConfiguration.maximumPitch)

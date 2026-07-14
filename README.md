@@ -65,8 +65,25 @@ The **Game** menu has **Toggle Fly Mode** (⌥⌘F, checkmark shows the current 
 Effects** toggle.  Block place/break sounds, footsteps, a landing thud, and the ambient
 wind are all synthesized in code at launch — like the texture atlas, the project ships
 zero binary assets.
-The **Debug Inspector** (Tab) includes sliders for **mouse sensitivity** and
-**field of view** — both are saved between launches.
+
+Use **VoxelDemo ▸ Settings…** (⌘,) for the native Settings window. It groups the
+persisted **render resolution**, **aspect ratio**, **mouse sensitivity**, **invert look
+Y**, **field of view**, **sound effects**, and **master volume** controls into Display,
+Controls, and Sound tabs.
+
+The **View** menu now handles the native display and presentation options:
+**Window Size** presets, **Aspect Ratio** locking (**Free**, **16:9**, **16:10**,
+**4:3**), **Render Resolution** from **50%** to **200%**, **Enter Full Screen**
+(^⌘F), plus the existing debug-inspector / HUD / minimap / crosshair toggles. Render
+resolution is the main GPU-cost lever: **50%** renders one quarter as many pixels as
+**100%**, then the Metal layer scales the image back up to the window.
+
+The **Window** menu provides the standard macOS **Minimize** (⌘M), **Zoom**, and
+**Bring All to Front** commands. The main window also remembers its size and position
+between launches, and an aspect-ratio lock survives relaunches too.
+
+The **Debug Inspector** (Tab) still exposes **mouse sensitivity** and **field of view**
+in-game for quick tuning, and those values stay in sync with the Settings window.
 
 ## Key engine concepts
 
@@ -102,6 +119,9 @@ sound, startup, recent-worlds list — is covered by `Tests/VoxelDemoTests`.
 
 ## Further reading
 
+- [Hard-Earned Lessons Ledger](docs/LESSONS.md)
+  — the append-only ledger of hard-earned lessons: superseded knowledge stays
+  documented instead of being deleted.
 - [Hunting Sky-Holes: Debugging Mixed-Resolution Voxel LOD Seams on Metal](docs/mixed-lod-seam-debugging.md)
   — an engineering case study on the diagnostic tooling and the ten root causes behind
   the LOD seam "see-through" glitch, including the false diagnoses along the way.

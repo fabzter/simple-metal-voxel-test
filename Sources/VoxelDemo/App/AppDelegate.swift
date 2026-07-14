@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var gameView: MetalView?
     private var eventMonitor: Any?
     private var recentWorldsMenu: NSMenu?
+    private weak var trackedViewMenu: NSMenu?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let frame = NSRect(x: 0, y: 0, width: 1024, height: 768)
@@ -20,7 +21,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         window.title = windowTitle
         window.center()
+        window.collectionBehavior.insert(.fullScreenPrimary)
+        window.setFrameAutosaveName("VoxelDemoMainWindow")
         window.minSize = NSSize(width: 960, height: 640)
+        if let aspectSize = SettingsStore().aspectRatio.size {
+            window.contentAspectRatio = aspectSize
+        }
         window.acceptsMouseMovedEvents = true
         configureMenus()
 
@@ -75,6 +81,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             withTitle: "About \(appName)",
             action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)),
             keyEquivalent: "")
+        let settingsItem = appMenu.addItem(
+            withTitle: "Settings…",
+            action: #selector(openSettings(_:)),
+            keyEquivalent: ",")
+        settingsItem.keyEquivalentModifierMask = [.command]
         appMenu.addItem(.separator())
         appMenu.addItem(
             withTitle: "Quit \(appName)", action: #selector(NSApplication.terminate(_:)),
@@ -159,6 +170,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         mainMenu.addItem(viewMenuItem)
 
         let viewMenu = NSMenu(title: "View")
+        viewMenu.delegate = self
+        trackedViewMenu = viewMenu
+        let windowSizeItem = NSMenuItem(title: "Window Size", action: nil, keyEquivalent: "")
+        let windowSizeMenu = NSMenu(title: "Window Size")
+        for (width, height) in [(1024, 768), (1280, 720), (1600, 900), (1920, 1080)] {
+            let item = NSMenuItem(
+                title: "\(width)×\(height)",
+                action: #selector(setWindowSize(_:)),
+                keyEquivalent: "")
+            // Pack width + height into one Int so the selector can stay a tiny Objective-C bridge.
+            item.tag = width * 10_000 + height
+            windowSizeMenu.addItem(item)
+        }
+        windowSizeItem.submenu = windowSizeMenu
+        viewMenu.addItem(windowSizeItem)
+
+        let aspectRatioItem = NSMenuItem(title: "Aspect Ratio", action: nil, keyEquivalent: "")
+        let aspectRatioMenu = NSMenu(title: "Aspect Ratio")
+        for aspectRatio in WindowAspectRatio.allCases {
+            let item = NSMenuItem(
+                title: aspectRatio.displayName,
+                action: #selector(setAspectRatio(_:)),
+                keyEquivalent: "")
+            item.representedObject = aspectRatio.rawValue
+            aspectRatioMenu.addItem(item)
+        }
+        aspectRatioItem.submenu = aspectRatioMenu
+        viewMenu.addItem(aspectRatioItem)
+
+        let renderScaleItem = NSMenuItem(
+            title: "Render Resolution", action: nil, keyEquivalent: "")
+        let renderScaleMenu = NSMenu(title: "Render Resolution")
+        for percent in [50, 75, 100, 125, 150, 200] {
+            let item = NSMenuItem(
+                title: "\(percent)%",
+                action: #selector(setRenderScale(_:)),
+                keyEquivalent: "")
+            item.tag = percent
+            renderScaleMenu.addItem(item)
+        }
+        renderScaleItem.submenu = renderScaleMenu
+        viewMenu.addItem(renderScaleItem)
+        viewMenu.addItem(.separator())
+        let fullscreenItem = viewMenu.addItem(
+            withTitle: "Enter Full Screen",
+            action: #selector(NSWindow.toggleFullScreen(_:)),
+            keyEquivalent: "f")
+        fullscreenItem.keyEquivalentModifierMask = [.control, .command]
+        viewMenu.addItem(.separator())
         let inspectorItem = viewMenu.addItem(
             withTitle: "Toggle Debug Inspector",
             action: #selector(toggleDebugInspector(_:)),
@@ -183,6 +243,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             keyEquivalent: "c")
         crosshairItem.keyEquivalentModifierMask = [.option, .command]
         viewMenuItem.submenu = viewMenu
+
+        let windowMenuItem = NSMenuItem(title: "Window", action: nil, keyEquivalent: "")
+        mainMenu.addItem(windowMenuItem)
+
+        let windowMenu = NSMenu(title: "Window")
+        let minimizeItem = windowMenu.addItem(
+            withTitle: "Minimize",
+            action: #selector(NSWindow.performMiniaturize(_:)),
+            keyEquivalent: "m")
+        minimizeItem.keyEquivalentModifierMask = [.command]
+        windowMenu.addItem(
+            withTitle: "Zoom",
+            action: #selector(NSWindow.performZoom(_:)),
+            keyEquivalent: "")
+        windowMenu.addItem(.separator())
+        windowMenu.addItem(
+            withTitle: "Bring All to Front",
+            action: #selector(NSApplication.arrangeInFront(_:)),
+            keyEquivalent: "")
+        windowMenuItem.submenu = windowMenu
+        NSApp.windowsMenu = windowMenu
 
         let helpMenuItem = NSMenuItem(title: "Help", action: nil, keyEquivalent: "")
         mainMenu.addItem(helpMenuItem)
@@ -255,6 +336,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         gameView?.toggleSoundEffects()
     }
 
+    @objc private func openSettings(_ sender: Any?) {
+        settingsWindowController.show()
+    }
+
     @objc private func openRecentWorld(_ sender: NSMenuItem) {
         guard let path = sender.representedObject as? String else { return }
         gameView?.openRecentWorld(atPath: path)
@@ -267,6 +352,67 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func resetWorld(_ sender: Any?) {
         gameView?.resetWorld()
     }
+
+    @objc private func setWindowSize(_ sender: NSMenuItem) {
+        let width = sender.tag / 10_000
+        let height = sender.tag % 10_000
+        window?.setContentSize(NSSize(width: width, height: height))
+    }
+
+    @objc private func setAspectRatio(_ sender: NSMenuItem) {
+        let aspectRatio =
+            WindowAspectRatio(rawValue: sender.representedObject as? String ?? "")
+            ?? .free
+        applyAspectRatio(aspectRatio)
+    }
+
+    @objc private func setRenderScale(_ sender: NSMenuItem) {
+        gameView?.setRenderScale(CGFloat(sender.tag) / 100)
+    }
+
+    private func applyAspectRatio(_ aspectRatio: WindowAspectRatio) {
+        var settings = SettingsStore()
+        settings.aspectRatio = aspectRatio
+
+        guard let window else { return }
+        guard let size = aspectRatio.size else {
+            window.contentAspectRatio = .zero
+            return
+        }
+
+        window.contentAspectRatio = size
+        let contentSize = window.contentRect(forFrameRect: window.frame).size
+        let minimumWidthForAspect = ceil(window.minSize.height * size.width / size.height)
+        let snappedWidth = max(contentSize.width, window.minSize.width, minimumWidthForAspect)
+        let snappedHeight = round(snappedWidth * size.height / size.width)
+        window.setContentSize(NSSize(width: snappedWidth, height: snappedHeight))
+    }
+
+    private lazy var settingsWindowController: SettingsWindowController = {
+        let controller = SettingsWindowController()
+        controller.onRenderScaleChanged = { [weak self] scale in
+            self?.gameView?.setRenderScale(scale)
+        }
+        controller.onAspectRatioChanged = { [weak self] aspectRatio in
+            self?.applyAspectRatio(aspectRatio)
+        }
+        controller.onLookSensitivityChanged = { [weak self] value in
+            self?.gameView?.setLookSensitivity(value)
+        }
+        controller.onInvertLookYChanged = { [weak self] value in
+            self?.gameView?.setInvertLookY(value)
+        }
+        controller.onFieldOfViewChanged = { [weak self] value in
+            self?.gameView?.setFieldOfView(value)
+        }
+        controller.onSoundEnabledChanged = { [weak self] value in
+            self?.gameView?.setSoundEnabled(value)
+        }
+        controller.onMasterVolumeChanged = { [weak self] value in
+            self?.gameView?.setMasterVolume(value)
+        }
+        return controller
+    }()
 }
 
 // MARK: - Menu state
@@ -274,6 +420,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 extension AppDelegate: NSMenuDelegate {
     /// Rebuilds File ▸ Open Recent each time it opens.
     func menuNeedsUpdate(_ menu: NSMenu) {
+        if menu === trackedViewMenu {
+            menu.items.first { $0.action == #selector(NSWindow.toggleFullScreen(_:)) }?.title =
+                (window?.styleMask.contains(.fullScreen) ?? false)
+                ? "Exit Full Screen" : "Enter Full Screen"
+            return
+        }
+
         guard menu === recentWorldsMenu else { return }
         menu.removeAllItems()
 
@@ -306,6 +459,16 @@ extension AppDelegate: NSMenuItemValidation {
             menuItem.state = (gameView?.isPlayerFlying ?? false) ? .on : .off
         case #selector(toggleSoundEffects(_:)):
             menuItem.state = (gameView?.isSoundEnabled ?? true) ? .on : .off
+        case #selector(setAspectRatio(_:)):
+            let rawValue = menuItem.representedObject as? String
+            menuItem.state = rawValue == SettingsStore().aspectRatio.rawValue ? .on : .off
+            return !(window?.styleMask.contains(.fullScreen) ?? false)
+        case #selector(setRenderScale(_:)):
+            menuItem.state =
+                abs((gameView?.currentRenderScale ?? 1) * 100 - CGFloat(menuItem.tag)) < 1
+                ? .on : .off
+        case #selector(setWindowSize(_:)):
+            return !(window?.styleMask.contains(.fullScreen) ?? false)
         case #selector(clearRecentWorlds(_:)):
             return !RecentWorldsStore().paths().isEmpty
         default:
