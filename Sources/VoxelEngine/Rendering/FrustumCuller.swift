@@ -30,7 +30,10 @@ struct FrustumCuller {
             Self.normalizePlane(r3 - r0),
             Self.normalizePlane(r3 + r1),
             Self.normalizePlane(r3 - r1),
-            Self.normalizePlane(r3 + r2),
+            // `float4x4.perspective` builds a Metal [0,1] clip-space projection (NDC z=0 at
+            // near, 1 at far), whose near plane is row `r2`. `r3 + r2` is the OpenGL [-1,1]
+            // form and would keep geometry closer than the near clip.
+            Self.normalizePlane(r2),
             Self.normalizePlane(r3 - r2),
         ]
     }

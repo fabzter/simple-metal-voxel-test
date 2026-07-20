@@ -582,6 +582,12 @@ final class MetalView: NSView {
  }
 
  @objc private func windowKeyStateChanged(_ notification: Notification) {
+  if window?.isKeyWindow != true {
+   // The window lost key focus (cmd-tab, click-away). A movement key held at that moment
+   // never gets its key-up event, so without this the player keeps walking while we're
+   // backgrounded. Clear held gameplay input before updating cursor capture.
+   inputController.cancelGameplayInput()
+  }
   updateInteractiveState()
  }
 

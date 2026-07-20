@@ -50,6 +50,24 @@ struct PlayerControllerTests {
     }
 
     @Test
+    func bodyDoesNotPenetrateRenderedWallFace() {
+        // Voxel `i` renders the span `[i-0.5, i+0.5]` (centered convention). The body AABB
+        // must stop flush with the rendered `-x` face of cell 5 (at x = 4.5), not ~0.5 past
+        // it. With the old plain-`floor()` collision the body front edge reached ~5.0 and the
+        // eye looked through the block (back-face culling hid the near face).
+        let world = VoxelWorld(gridSize: 8, chunkSize: 8, generation: .empty)
+        world.setSolid(true, x: 5, y: 0, z: 2)
+        world.setSolid(true, x: 5, y: 1, z: 2)  // cover the body's y-cells 0..1
+        let player = PlayerController(position: SIMD3<Float>(0, 0, 2), isGrounded: true)
+        for _ in 0..<600 {
+            player.update(dt: 1.0 / 60.0, input: PlayerInput(moveRight: true), in: world)
+        }
+        // Rendered -x face of cell 5 is at x = 5 - 0.5 = 4.5; body front edge must not cross it.
+        #expect(player.position.x + player.playerRadius <= 4.5 + 0.05)
+        #expect(player.position.x > 4.0)  // sanity: actually reached the wall
+    }
+
+    @Test
     func sprintMultipliesMoveSpeed() {
         let world = VoxelWorld(gridSize: 8, generation: .empty)
         let player = PlayerController(position: SIMD3<Float>(2, 0, 2), isGrounded: true)

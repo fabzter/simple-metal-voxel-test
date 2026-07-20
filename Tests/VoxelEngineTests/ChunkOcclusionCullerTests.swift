@@ -30,4 +30,22 @@ struct ChunkOcclusionCullerTests {
             !culler.isVisible(
                 chunkIndex: VoxelChunkIndex(x: 0, y: 0, z: 0), world: world, camera: camera))
     }
+
+    @Test
+    func nearChunkIsNeverOcclusionCulled() {
+        // A solid chunk directly beside the camera must stay visible. Without the near-chunk
+        // exemption every sample ray hits the occluder wall (chunk (0,0,1)) first, so the
+        // target chunk (0,0,2) is wrongly culled and the terrain in front of the player turns
+        // see-through.
+        let world = VoxelWorld(gridSize: 32, chunkSize: 8, generation: .empty)
+        for x in 0..<8 {
+            for y in 0..<8 { for z in 8..<16 { world.setSolid(true, x: x, y: y, z: z) } }
+        }  // occluder wall = chunk (0,0,1)
+        world.setSolid(true, x: 4, y: 4, z: 18)  // target chunk (0,0,2) non-empty
+        let camera = CameraState(position: SIMD3<Float>(4, 4, 8.5), yaw: 0, pitch: 0)
+        let culler = ChunkOcclusionCuller()
+        #expect(
+            culler.isVisible(
+                chunkIndex: VoxelChunkIndex(x: 0, y: 0, z: 2), world: world, camera: camera))
+    }
 }
