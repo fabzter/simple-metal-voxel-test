@@ -157,12 +157,16 @@ public final class PlayerController {
 
         if collides(at: verticalTestPosition, in: world) {
             if velocity.y <= 0 {
+                // Landing: snap the feet to the top of the floor cell they entered. Floor cell
+                // `minY` renders its top at `minY + 0.5` (centered convention).
                 isGrounded = true
-                let minY = Int(floor(verticalTestPosition.y))
-                verticalTestPosition.y = Float(minY + 1)
+                let minY = Int(floor(verticalTestPosition.y + 0.5))
+                verticalTestPosition.y = Float(minY) + 0.5
             } else {
-                let maxY = Int(floor(verticalTestPosition.y + playerHeight))
-                verticalTestPosition.y = Float(maxY) - playerHeight - 0.001
+                // Head bump: snap the body top just below the ceiling cell's rendered bottom.
+                // Ceiling cell `maxY` renders its bottom at `maxY - 0.5`.
+                let maxY = Int(floor(verticalTestPosition.y + playerHeight + 0.5))
+                verticalTestPosition.y = Float(maxY) - 0.5 - playerHeight - 0.001
             }
 
             velocity.y = 0
@@ -176,17 +180,18 @@ public final class PlayerController {
 
     func collides(at position: SIMD3<Float>, in world: VoxelWorld) -> Bool {
         // Voxel `i` occupies world-space `[i-0.5, i+0.5)` on every axis (see `ChunkBounds`
-        // and `VoxelMesher.faceQuad`), so the horizontal body AABB must be rounded to cell
-        // centers (`floor(v + 0.5)`), not floored. Plain `floor()` would treat voxel `i` as
-        // `[i, i+1)`, letting the body and eye push ~0.5 into a rendered wall in +x/+z — the
-        // near face then falls behind the eye, gets back-face-culled, and the block looks
-        // see-through. The y bounds keep the legacy `[i, i+1)` behavior on purpose: the
-        // vertical landing/head-bump resolution and the `isStandingOnGround` probe are tuned
-        // to it and to the `y<0` phantom floor.
+        // and `VoxelMesher.faceQuad`), so the body AABB must be rounded to cell centers
+        // (`floor(v + 0.5)`), not floored, on ALL axes. Plain `floor()` treats voxel `i` as
+        // `[i, i+1)`, offset 0.5 from the rendered block, letting the body and eye push ~0.5
+        // into a rendered wall or ceiling — the near face then falls behind the eye, gets
+        // back-face-culled, and the block looks see-through. Rounding x/z keeps the player
+        // flush with rendered walls; rounding y keeps the head out of rendered ceilings and
+        // the feet on top of rendered floors (the player rests 0.5 lower than the old
+        // `[i, i+1)` convention — on the visible surface instead of floating above it).
         let minX = Int(floor(position.x - playerRadius + 0.5))
         let maxX = Int(floor(position.x + playerRadius + 0.5))
-        let minY = Int(floor(position.y))
-        let maxY = Int(floor(position.y + playerHeight))
+        let minY = Int(floor(position.y + 0.5))
+        let maxY = Int(floor(position.y + playerHeight + 0.5))
         let minZ = Int(floor(position.z - playerRadius + 0.5))
         let maxZ = Int(floor(position.z + playerRadius + 0.5))
 
