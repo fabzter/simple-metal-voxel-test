@@ -14,7 +14,10 @@ struct PlayerControllerTests {
         }
 
         #expect(player.isGrounded)
-        #expect(abs(player.position.y) < 0.0001)
+        // Centered convention: the phantom floor's top surface is at y = -0.5 (top of cell
+        // -1), so the player rests there instead of the legacy y = 0 (which floated 0.5 above
+        // the visible ground).
+        #expect(abs(player.position.y + 0.5) < 0.0001)
         #expect(abs(player.velocity.y) < 0.0001)
     }
 
@@ -65,6 +68,34 @@ struct PlayerControllerTests {
         // Rendered -x face of cell 5 is at x = 5 - 0.5 = 4.5; body front edge must not cross it.
         #expect(player.position.x + player.playerRadius <= 4.5 + 0.05)
         #expect(player.position.x > 4.0)  // sanity: actually reached the wall
+    }
+
+    @Test
+    func headDoesNotPenetrateRenderedCeiling() {
+        // A 3-cell-tall corridor: floor at cell y=0 (renders its top at 0.5) and a ceiling at
+        // cell y=3 (renders its bottom at 3 - 0.5 = 2.5). The player stands in the gap and
+        // jumps. The eye (position.y + eyeHeight) must never enter the rendered ceiling block,
+        // i.e. must stay <= 2.5 — otherwise the ceiling's near face is behind the eye, gets
+        // back-face-culled, and the block looks see-through from below.
+        let world = VoxelWorld(gridSize: 8, chunkSize: 8, generation: .empty)
+        for x in 0..<8 {
+            for z in 0..<8 {
+                world.setSolid(true, x: x, y: 0, z: z)   // floor
+                world.setSolid(true, x: x, y: 3, z: z)   // ceiling
+            }
+        }
+        let player = PlayerController(position: SIMD3<Float>(4, 0.6, 4))
+        // Settle onto the floor first (convention-independent).
+        for _ in 0..<120 {
+            player.update(dt: 1.0 / 60.0, input: PlayerInput(), in: world)
+        }
+        // Jump repeatedly under the ceiling and track the highest the eye reaches.
+        var maxEyeY: Float = -.infinity
+        for _ in 0..<300 {
+            player.update(dt: 1.0 / 60.0, input: PlayerInput(jump: true), in: world)
+            maxEyeY = max(maxEyeY, player.position.y + player.cameraConfiguration.eyeHeight)
+        }
+        #expect(maxEyeY <= 2.5 + 0.01)
     }
 
     @Test

@@ -90,6 +90,10 @@ and the block looks see-through. The y bounds keep the legacy `[i, i+1)`
 behavior because the vertical landing/head-bump resolution and the
 `isStandingOnGround` probe are tuned to it and to the `y<0` phantom floor.
 
+_Superseded in part by #15 (2026-07-20): the last sentence is no longer true —
+the y bounds were also moved to the centered convention once the head-in-ceiling
+bug surfaced. The original text is kept above, never forgotten._
+
 ## 12. Near chunks are exempt from occlusion culling
 
 `ChunkOcclusionCuller.isVisible` samples only a chunk AABB's 8 corners +
@@ -118,3 +122,28 @@ without calling `inputController.cancelGameplayInput()` on resign the player
 keeps walking while backgrounded. The `didResignKey` observer was already
 registered; the fix only adds the cancel call before the existing
 `updateInteractiveState()`.
+
+## 15. Vertical collision uses the centered convention too
+
+Lesson #11 originally kept the y axis on the legacy `[i, i+1)` convention to
+avoid touching the landing/head-bump resolution and the `y<0` phantom floor.
+That left a real bug: a player standing or jumping in a low corridor got its
+eye ~0.5 inside a rendered ceiling block (the head-bump resolution placed the
+body top at the legacy cell bottom `c`, but the ceiling renders its bottom at
+`c - 0.5`), so the ceiling's near face fell behind the eye, was back-face
+culled, and looked see-through. The fix moves the WHOLE y axis to the centered
+convention, consistently:
+
+- `collides()`: `minY = floor(position.y + 0.5)`,
+  `maxY = floor(position.y + playerHeight + 0.5)`.
+- Landing (`velocity.y <= 0`): snap feet to the floor cell's rendered top,
+  `position.y = minY + 0.5`.
+- Head bump (`velocity.y > 0`): snap the body top just below the ceiling cell's
+  rendered bottom, `position.y = maxY - 0.5 - playerHeight - 0.001`.
+
+The `isStandingOnGround` 0.05 probe works unchanged. A visible consequence: the
+player now rests 0.5 lower — on top of the rendered surface (empty-world rest is
+`y = -0.5`, the top of phantom cell `-1`) instead of floating 0.5 above it.
+`playerFallsToGroundPlane` was updated to expect `y ≈ -0.5`, and
+`headDoesNotPenetrateRenderedCeiling` is the regression test (eye must stay at
+or below the ceiling's rendered bottom).
