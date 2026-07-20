@@ -76,3 +76,45 @@ That is why the fly-mode menu command uses `⌥⌘F` instead of plain `F` in
 The Application Support folder stays named `VoxelGame` even after the engine /
 demo split. That historical name preserves compatibility with existing local
 saves, so a cleanup rename would cost user data continuity for almost no gain.
+
+
+## 11. Centered voxel convention in collision
+
+Voxel index `i` occupies world-space `[i-0.5, i+0.5)` on every axis (proven
+by `ChunkBounds.bounds` offsets and `VoxelMesher.faceQuad` at `cell ± 0.5`).
+`PlayerController.collides()` must round the horizontal body AABB to cell
+centers (`floor(v + 0.5)`), not plain `floor()`. Plain `floor()` treats
+voxel `i` as `[i, i+1)`, letting the body and eye push ~0.5 into a rendered
+wall in +x/+z; the near face then falls behind the eye, gets back-face-culled,
+and the block looks see-through. The y bounds keep the legacy `[i, i+1)`
+behavior because the vertical landing/head-bump resolution and the
+`isStandingOnGround` probe are tuned to it and to the `y<0` phantom floor.
+
+## 12. Near chunks are exempt from occlusion culling
+
+`ChunkOcclusionCuller.isVisible` samples only a chunk AABB's 8 corners +
+center. At close range the solid surface the player faces is in the chunk
+interior, not at a sampled corner, so every corner ray can read as occluded and
+wrongly hide the chunk — the block in front of the player turns see-through.
+The fix is a near-exemption at the top of `isVisible`: always return true when
+the camera lies within one chunk (the 3×3×3 neighborhood) of the chunk's AABB.
+This lives in the culler (not the render loop) so it stays unit-testable without
+Metal.
+
+## 13. Metal [0,1] frustum near plane
+
+`float4x4.perspective` builds a Metal `[0,1]` clip-space projection (NDC z=0
+at near, 1 at far). Gribb-Hartmann near-plane extraction for `[0,1]` clip is
+row `r2`, not the OpenGL `[-1,1]` form `r3 + r2`. `FrustumCuller` used
+`r3 + r2`, making the near plane over-permissive (keeping geometry closer than
+the near clip). It did not cause see-through but is a real correctness bug; the
+far plane stays `r3 - r2`.
+
+## 14. Cancel gameplay input on window focus loss
+
+`MetalView.windowKeyStateChanged` fires on `didBecomeKey`/`didResignKey`.
+A movement key held while the user cmd-tabs away never gets its key-up event, so
+without calling `inputController.cancelGameplayInput()` on resign the player
+keeps walking while backgrounded. The `didResignKey` observer was already
+registered; the fix only adds the cancel call before the existing
+`updateInteractiveState()`.

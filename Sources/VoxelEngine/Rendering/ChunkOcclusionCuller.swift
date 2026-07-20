@@ -10,6 +10,20 @@ struct ChunkOcclusionCuller {
 
     func isVisible(chunkIndex: VoxelChunkIndex, world: VoxelWorld, camera: CameraState) -> Bool {
         let bounds = ChunkBounds.bounds(for: chunkIndex, chunkSize: world.chunkSize)
+
+        // A chunk the camera is inside or directly beside must never be occlusion-culled. At
+        // close range the solid surface the player faces lives in the chunk interior, not at a
+        // sampled AABB corner, so every corner ray can read as occluded and wrongly hide the
+        // chunk — the block in front of the player turns see-through. Exempt the chunk's
+        // 3x3x3 neighborhood by growing its AABB one chunk per axis and testing containment.
+        let margin = Float(world.chunkSize)
+        let p = camera.position
+        if p.x >= bounds.minimum.x - margin, p.x <= bounds.maximum.x + margin,
+           p.y >= bounds.minimum.y - margin, p.y <= bounds.maximum.y + margin,
+           p.z >= bounds.minimum.z - margin, p.z <= bounds.maximum.z + margin {
+            return true
+        }
+
         let samplePoints = samplePoints(for: bounds)
 
         for samplePoint in samplePoints {

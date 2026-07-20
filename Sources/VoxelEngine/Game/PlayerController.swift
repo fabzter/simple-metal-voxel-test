@@ -175,12 +175,20 @@ public final class PlayerController {
     }
 
     func collides(at position: SIMD3<Float>, in world: VoxelWorld) -> Bool {
-        let minX = Int(floor(position.x - playerRadius))
-        let maxX = Int(floor(position.x + playerRadius))
+        // Voxel `i` occupies world-space `[i-0.5, i+0.5)` on every axis (see `ChunkBounds`
+        // and `VoxelMesher.faceQuad`), so the horizontal body AABB must be rounded to cell
+        // centers (`floor(v + 0.5)`), not floored. Plain `floor()` would treat voxel `i` as
+        // `[i, i+1)`, letting the body and eye push ~0.5 into a rendered wall in +x/+z — the
+        // near face then falls behind the eye, gets back-face-culled, and the block looks
+        // see-through. The y bounds keep the legacy `[i, i+1)` behavior on purpose: the
+        // vertical landing/head-bump resolution and the `isStandingOnGround` probe are tuned
+        // to it and to the `y<0` phantom floor.
+        let minX = Int(floor(position.x - playerRadius + 0.5))
+        let maxX = Int(floor(position.x + playerRadius + 0.5))
         let minY = Int(floor(position.y))
         let maxY = Int(floor(position.y + playerHeight))
-        let minZ = Int(floor(position.z - playerRadius))
-        let maxZ = Int(floor(position.z + playerRadius))
+        let minZ = Int(floor(position.z - playerRadius + 0.5))
+        let maxZ = Int(floor(position.z + playerRadius + 0.5))
 
         for x in minX...maxX {
             for y in minY...maxY {
